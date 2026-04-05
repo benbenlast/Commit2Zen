@@ -274,7 +274,14 @@ async function zentaoCreateTask(url, token, taskData, retries = 3) {
       const result = await response.json();
       return result;
     } catch (error) {
-      if (attempt < retries && (error.name === 'AbortError' || error.message.includes('fetch'))) {
+      const isNetworkError =
+        error.name === 'AbortError' ||
+        error.message.includes('fetch') ||
+        error.code === 'ECONNREFUSED' ||
+        error.code === 'ENOTFOUND' ||
+        error.code === 'ETIMEDOUT';
+
+      if (attempt < retries && isNetworkError) {
         const delay = Math.pow(2, attempt - 1) * 1000;
         console.warn(`   ⚠️  请求失败,${delay / 1000}s 后重试 (${attempt}/${retries})...`);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -283,6 +290,8 @@ async function zentaoCreateTask(url, token, taskData, retries = 3) {
       }
     }
   }
+
+  throw new Error('所有重试均失败');
 }
 
 function buildTaskDescription(branchData) {
@@ -327,12 +336,86 @@ function buildTaskPayload(branchData, config) {
 }
 
 // ============================================================
+// 报告生成模块
+// ============================================================
+
+function generateReport(branches, results, config) {
+  const timestamp = new Date().toISOString();
+  const totalCommits = branches.reduce((sum, b) => sum + b.commitCount, 0);
+  const tasksCreated = results.filter(r => r.success).length;
+  const tasksFailed = results.filter(r => !r.success).length;
+
+  const report = {
+    timestamp,
+    project: 'Commit2Zen',
+    branches: branches.map((branch, i) => ({
+      branch: branch.branch,
+      commitCount: branch.commitCount,
+      taskCreated: results[i].success,
+      taskId: results[i].taskId || null,
+      taskUrl: results[i].taskUrl || null,
+      error: results[i].error || null
+    })),
+    summary: {
+      totalBranches: branches.length,
+      totalCommits,
+      tasksCreated,
+      tasksFailed
+    }
+  };
+
+  return report;
+}
+
+function saveReport(report, config) {
+  const reportDir = join(__dirname, config.output.reportDir);
+
+  if (!existsSync(reportDir)) {
+    mkdirSync(reportDir, { recursive: true });
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const reportPath = join(reportDir, `${dateStr}-report.json`);
+
+  try {
+    writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf-8');
+    console.log('📄 报告已保存:', reportPath);
+  } catch (error) {
+    console.error('⚠️  保存报告文件失败:', error.message);
+  }
+}
+
+function printSummary(report) {
+  console.log('\n' + '='.repeat(60));
+  console.log('📊 执行摘要');
+  console.log('='.repeat(60));
+  console.log(`分支数: ${report.summary.totalBranches}`);
+  console.log(`提交数: ${report.summary.totalCommits}`);
+  console.log(`创建任务: ${report.summary.tasksCreated}`);
+  console.log(`失败任务: ${report.summary.tasksFailed}`);
+  console.log('='.repeat(60));
+
+  for (const branch of report.branches) {
+    const icon = branch.taskCreated ? '✅' : '❌';
+    console.log(`${icon} ${branch.branch}: ${branch.commitCount} 个提交`);
+    if (branch.taskId) {
+      console.log(`   任务 ID: ${branch.taskId}`);
+    }
+    if (branch.error) {
+      console.log(`   错误: ${branch.error}`);
+    }
+  }
+  console.log('');
+}
+
+// ============================================================
 // 主入口
 // ============================================================
 
 async function main() {
   console.log('🚀 Commit2Zen - Git 提交汇总到禅道\n');
 
+  // 1. 加载配置
   const config = loadConfig();
   validateConfig(config);
 
@@ -341,6 +424,7 @@ async function main() {
   console.log('   项目 ID:', config.zentao.projectId);
   console.log('');
 
+  // 2. 收集 Git 日志
   console.log('📦 收集 Git 提交记录...');
   const commits = collectGitLog(config.git.maxCommits);
 
@@ -352,6 +436,7 @@ async function main() {
   console.log(`✅ 找到 ${commits.length} 个提交`);
   console.log('');
 
+  // 3. 按分支分组
   console.log('📂 按分支分组...');
   const branches = groupCommitsByBranch(commits);
 
@@ -360,6 +445,53 @@ async function main() {
     console.log(`   🌿 ${branch.branch} (${branch.commitCount} 个提交, ${branch.authors.join(', ')})`);
   }
   console.log('');
+
+  // 4. 登录禅道
+  console.log('🔐 登录禅道...');
+  const token = await zentaoLogin(
+    config.zentao.url,
+    config.zentao.account,
+    config.zentao.password
+  );
+  console.log('✅ 登录成功\n');
+
+  // 5. 为每个分支创建任务
+  console.log('📝 创建禅道任务...');
+  const results = [];
+
+  for (const branch of branches) {
+    console.log(`   🌿 处理分支: ${branch.branch}...`);
+
+    try {
+      const payload = buildTaskPayload(branch, config);
+      const result = await zentaoCreateTask(
+        config.zentao.url,
+        token,
+        payload
+      );
+
+      results.push({
+        success: true,
+        taskId: result.id,
+        taskUrl: `${config.zentao.url}/task-view-${result.id}.html`
+      });
+
+      console.log(`   ✅ 任务创建成功 (ID: ${result.id})`);
+    } catch (error) {
+      results.push({
+        success: false,
+        error: error.message
+      });
+      console.error(`   ❌ 任务创建失败: ${error.message}`);
+    }
+  }
+
+  console.log('');
+
+  // 6. 生成报告
+  const report = generateReport(branches, results, config);
+  saveReport(report, config);
+  printSummary(report);
 }
 
 main().catch(error => {
