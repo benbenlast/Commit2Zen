@@ -87,6 +87,11 @@ function collectGitLog(maxCommits = 100) {
     process.exit(1);
   }
 
+  if (!Number.isInteger(maxCommits) || maxCommits < 1) {
+    console.error('❌ maxCommits 必须是正整数');
+    process.exit(1);
+  }
+
   try {
     const log = execSync(
       `git log -n ${maxCommits} --all --format="%H|%an|%ad|%s|%D" --date=iso`,
@@ -137,6 +142,81 @@ function collectGitLog(maxCommits = 100) {
 }
 
 // ============================================================
+// 分支分组模块
+// ============================================================
+
+function groupCommitsByBranch(commits) {
+  const branchMap = new Map();
+
+  for (const commit of commits) {
+    // 优先使用显式分支信息,否则标记为未分类
+    const branchName = commit.branches.length > 0
+      ? commit.branches[0]
+      : '未分类';
+
+    if (!branchMap.has(branchName)) {
+      branchMap.set(branchName, []);
+    }
+    branchMap.get(branchName).push(commit);
+  }
+
+  // 转换为分组结果
+  return Array.from(branchMap.entries()).map(([branch, branchCommits]) => {
+    const authors = [...new Set(branchCommits.map(c => c.author))];
+    const dates = branchCommits.map(c => new Date(c.date));
+    const startDate = new Date(Math.min(...dates));
+    const endDate = new Date(Math.max(...dates));
+
+    return {
+      branch: branch,
+      commitCount: branchCommits.length,
+      authors: authors,
+      dateRange: {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+      },
+      commits: branchCommits,
+      summary: generateBranchSummary(branchCommits)
+    };
+  });
+}
+
+function generateBranchSummary(commits) {
+  const totalFiles = [...new Set(commits.flatMap(c => c.files))];
+
+  return {
+    totalCommits: commits.length,
+    totalAuthors: new Set(commits.map(c => c.author)).size,
+    totalFiles: totalFiles.length,
+    commitTypes: classifyCommits(commits),
+    topFiles: totalFiles.slice(0, 10)
+  };
+}
+
+function classifyCommits(commits) {
+  const types = {
+    feat: 0,
+    fix: 0,
+    docs: 0,
+    refactor: 0,
+    test: 0,
+    chore: 0,
+    other: 0
+  };
+
+  for (const commit of commits) {
+    const match = commit.message.match(/^(feat|fix|docs|refactor|test|chore)/);
+    if (match) {
+      types[match[1]]++;
+    } else {
+      types.other++;
+    }
+  }
+
+  return types;
+}
+
+// ============================================================
 // 主入口
 // ============================================================
 
@@ -160,11 +240,14 @@ async function main() {
   }
 
   console.log(`✅ 找到 ${commits.length} 个提交`);
-  commits.slice(0, 3).forEach(commit => {
-    console.log(`   - ${commit.hash} ${commit.message}`);
-  });
-  if (commits.length > 3) {
-    console.log(`   ... 还有 ${commits.length - 3} 个提交`);
+  console.log('');
+
+  console.log('📂 按分支分组...');
+  const branches = groupCommitsByBranch(commits);
+
+  console.log(`✅ 分为 ${branches.length} 个分支:`);
+  for (const branch of branches) {
+    console.log(`   🌿 ${branch.branch} (${branch.commitCount} 个提交, ${branch.authors.join(', ')})`);
   }
   console.log('');
 }
