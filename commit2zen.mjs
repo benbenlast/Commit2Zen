@@ -221,7 +221,7 @@ function classifyCommits(commits) {
 // ============================================================
 
 async function zentaoLogin(url, account, password) {
-  const loginUrl = `${url}/api.php/v1/users/login`;
+  const loginUrl = `${url}/api.php/v1/tokens`;
 
   try {
     const response = await fetch(loginUrl, {
@@ -259,7 +259,7 @@ async function zentaoCreateTask(url, token, taskData, retries = 3) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Token': `${token}`
         },
         body: JSON.stringify(taskData),
         signal: controller.signal
