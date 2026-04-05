@@ -69,6 +69,74 @@ function validateConfig(config) {
 }
 
 // ============================================================
+// Git 日志收集模块
+// ============================================================
+
+function isGitRepo() {
+  try {
+    execSync('git rev-parse --git-dir', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function collectGitLog(maxCommits = 100) {
+  if (!isGitRepo()) {
+    console.error('❌ 当前目录不是 Git 仓库');
+    process.exit(1);
+  }
+
+  try {
+    const log = execSync(
+      `git log -n ${maxCommits} --all --format="%H|%an|%ad|%s|%D" --date=iso`,
+      { encoding: 'utf-8' }
+    );
+
+    const lines = log.split('\n').filter(line => line.trim());
+
+    if (lines.length === 0) {
+      console.warn('⚠️  没有找到提交记录');
+      return [];
+    }
+
+    return lines.map(line => {
+      const parts = line.split('|');
+      const [hash, author, date, message, refs] = parts;
+
+      // 解析分支信息
+      const branches = refs
+        ? refs.match(/-> ([^\s,]+)/g)?.map(r => r.replace('-> ', '')) || []
+        : [];
+
+      // 获取修改的文件列表
+      let files = [];
+      try {
+        const filesOutput = execSync(
+          `git diff-tree --no-commit-id --name-only -r ${hash}`,
+          { encoding: 'utf-8' }
+        );
+        files = filesOutput.split('\n').filter(f => f.trim());
+      } catch {
+        // 忽略错误,可能是根提交
+      }
+
+      return {
+        hash: hash.substring(0, 7),
+        author,
+        date: date.trim(),
+        message,
+        branches,
+        files
+      };
+    });
+  } catch (error) {
+    console.error('❌ 获取 Git 日志失败:', error.message);
+    process.exit(1);
+  }
+}
+
+// ============================================================
 // 主入口
 // ============================================================
 
@@ -81,6 +149,23 @@ async function main() {
   console.log('✅ 配置加载成功');
   console.log('   禅道:', config.zentao.url);
   console.log('   项目 ID:', config.zentao.projectId);
+  console.log('');
+
+  console.log('📦 收集 Git 提交记录...');
+  const commits = collectGitLog(config.git.maxCommits);
+
+  if (commits.length === 0) {
+    console.log('ℹ️  没有需要处理的提交');
+    return;
+  }
+
+  console.log(`✅ 找到 ${commits.length} 个提交`);
+  commits.slice(0, 3).forEach(commit => {
+    console.log(`   - ${commit.hash} ${commit.message}`);
+  });
+  if (commits.length > 3) {
+    console.log(`   ... 还有 ${commits.length - 3} 个提交`);
+  }
   console.log('');
 }
 
