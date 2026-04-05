@@ -1,0 +1,19 @@
+{
+  "zentao": {
+    "url": "http://your-zentao.com",
+    "account": "your-account",
+    "password": "your-password",
+    "projectId": 1,
+    "assignedTo": "your-account",
+    "taskType": "dev"
+  },
+  "git": {
+    "maxCommits": 100,
+    "includeMerged": false,
+    "branchPattern": ".*"
+  },
+  "output": {
+    "reportDir": "reports",
+    "verbose": true
+  }
+}

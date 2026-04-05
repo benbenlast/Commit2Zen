@@ -1,0 +1,4 @@
+config.json
+reports/
+node_modules/
+*.log
