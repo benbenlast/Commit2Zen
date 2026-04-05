@@ -217,6 +217,116 @@ function classifyCommits(commits) {
 }
 
 // ============================================================
+// 禅道 API 客户端模块
+// ============================================================
+
+async function zentaoLogin(url, account, password) {
+  const loginUrl = `${url}/api.php/v1/users/login`;
+
+  try {
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account, password })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.token) {
+      throw new Error(data.message || '登录响应中未找到 token');
+    }
+
+    return data.token;
+  } catch (error) {
+    console.error('❌ 禅道登录失败:', error.message);
+    process.exit(1);
+  }
+}
+
+async function zentaoCreateTask(url, token, taskData, retries = 3) {
+  const taskUrl = `${url}/api.php/v1/tasks`;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(taskUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(taskData),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      if (attempt < retries && (error.name === 'AbortError' || error.message.includes('fetch'))) {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.warn(`   ⚠️  请求失败,${delay / 1000}s 后重试 (${attempt}/${retries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+function buildTaskDescription(branchData) {
+  const lines = [];
+
+  lines.push(`## 分支: ${branchData.branch}`);
+  lines.push('');
+  lines.push(`### 提交记录 (${branchData.commitCount})`);
+  lines.push('');
+
+  for (let i = 0; i < branchData.commits.length; i++) {
+    const commit = branchData.commits[i];
+    lines.push(`${i + 1}. **${commit.hash}** - ${commit.message}`);
+    lines.push(`   - 作者: ${commit.author}`);
+    lines.push(`   - 日期: ${commit.date.split('+')[0].trim()}`);
+    if (commit.files.length > 0) {
+      lines.push(`   - 文件: ${commit.files.join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('### 统计');
+  lines.push(`- 提交数: ${branchData.commitCount}`);
+  lines.push(`- 作者: ${branchData.authors.join(', ')}`);
+  lines.push(`- 时间范围: ${branchData.dateRange.start} ~ ${branchData.dateRange.end}`);
+  lines.push(`- 修改文件数: ${branchData.summary.totalFiles}`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function buildTaskPayload(branchData, config) {
+  return {
+    name: `[${branchData.branch}] 工作内容汇总`,
+    desc: buildTaskDescription(branchData),
+    project: config.zentao.projectId,
+    assignedTo: config.zentao.assignedTo,
+    type: config.zentao.taskType,
+    estStarted: branchData.dateRange.start,
+    deadline: branchData.dateRange.end
+  };
+}
+
+// ============================================================
 // 主入口
 // ============================================================
 
