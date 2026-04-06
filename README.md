@@ -52,10 +52,41 @@ node commit2zen.mjs
 - 详细报告保存在 `reports/YYYY-MM-DD-report.json`
 - 登录禅道查看创建的任务
 
+## 指定项目路径
+
+默认情况下,Commit2Zen 统计当前目录的 Git 提交。你可以通过以下方式指定任意项目:
+
+### 方式 1: 配置文件
+
+编辑 `config.json`:
+
+```json
+{
+  "projectPath": "/path/to/your/project",
+  "zentao": { ... }
+}
+```
+
+### 方式 2: 命令行参数
+
+```bash
+node commit2zen.mjs /path/to/your/project
+```
+
+命令行参数优先级高于配置文件。
+
+### 方式 3: 当前目录 (默认)
+
+```bash
+cd /path/to/your/project
+node commit2zen.mjs
+```
+
 ## 配置选项
 
 | 字段 | 必填 | 说明 | 默认值 |
 |------|------|------|--------|
+| projectPath | ❌ | 项目路径 | 当前目录 |
 | zentao.url | ✅ | 禅道地址 | - |
 | zentao.account | ✅ | 禅道账号 | - |
 | zentao.password | ✅ | 禅道密码 | - |
