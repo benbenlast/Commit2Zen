@@ -1,4 +1,5 @@
 {
+  "projectPath": "/path/to/your/project",
   "zentao": {
     "url": "http://your-zentao.com",
     "account": "your-account",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
@@ -12,6 +12,7 @@ const __dirname = dirname(__filename);
 // ============================================================
 
 const DEFAULT_CONFIG = {
+  projectPath: null, // 新增: null 表示使用当前目录
   zentao: {
     taskType: 'dev'
   },
@@ -66,6 +67,47 @@ function validateConfig(config) {
   }
 
   return config;
+}
+
+// ============================================================
+// 项目上下文管理模块
+// ============================================================
+
+function resolveProjectPath(configPath) {
+  // 1. 命令行参数优先
+  const cliPath = process.argv[2];
+  if (cliPath) {
+    return resolve(cliPath);
+  }
+  
+  // 2. 配置文件次之
+  if (configPath) {
+    return resolve(configPath);
+  }
+  
+  // 3. 默认当前目录
+  return process.cwd();
+}
+
+function validateProjectPath(projectPath) {
+  if (!existsSync(projectPath)) {
+    console.error(`❌ 项目路径不存在: ${projectPath}`);
+    process.exit(1);
+  }
+  
+  const originalCwd = process.cwd();
+  
+  // 切换到项目目录
+  process.chdir(projectPath);
+  
+  // 验证是否为 Git 仓库
+  if (!isGitRepo()) {
+    console.error(`❌ 不是 Git 仓库: ${projectPath}`);
+    process.chdir(originalCwd);
+    process.exit(1);
+  }
+  
+  return originalCwd;
 }
 
 // ============================================================
