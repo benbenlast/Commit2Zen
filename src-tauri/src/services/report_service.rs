@@ -21,8 +21,8 @@ pub fn generate_report(branches: Vec<BranchReport>) -> ExecutionReport {
 }
 
 pub fn save_report(report: &ExecutionReport, report_dir: &str) -> Result<String, String> {
-    let date = chrono::Local::now().format("%Y-%m-%d");
-    let filename = format!("{}-report.json", date);
+    let timestamp = chrono::Local::now().format("%Y-%m-%d_%H%M%S");
+    let filename = format!("{}-report.json", timestamp);
     let path = format!("{}/{}", report_dir, filename);
 
     fs::create_dir_all(report_dir)
@@ -47,9 +47,18 @@ pub fn get_history(report_dir: &str) -> Result<Vec<ReportMeta>, String> {
         let filename_str = filename.to_string_lossy();
 
         if filename_str.ends_with("-report.json") {
+            // 从文件名提取日期部分: YYYY-MM-DD_HHMMSS-report.json
+            let date_str = filename_str.replace("-report.json", "");
+            // 提取可读的日期时间: 2026-04-06 230456
+            let display_date = if date_str.len() >= 15 {
+                format!("{} {}", &date_str[..10], &date_str[11..17])
+            } else {
+                // 兼容旧格式
+                date_str.clone()
+            };
             reports.push(ReportMeta {
                 path: entry.path().to_string_lossy().to_string(),
-                date: filename_str.replace("-report.json", ""),
+                date: display_date,
                 filename: filename_str.to_string(),
             });
         }

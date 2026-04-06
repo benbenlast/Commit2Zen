@@ -1,18 +1,20 @@
 <template>
   <n-config-provider :theme="theme">
     <n-message-provider>
-      <n-layout has-sider>
-        <n-layout-sider bordered :width="200">
-          <n-menu
-            :value="route.name"
-            :options="menuOptions"
-            @update:value="handleMenuSelect"
-          />
-        </n-layout-sider>
-        <n-layout-content>
-          <router-view />
-        </n-layout-content>
-      </n-layout>
+      <n-dialog-provider>
+        <n-layout has-sider>
+          <n-layout-sider bordered :width="200">
+            <n-menu
+              :value="route.name"
+              :options="menuOptions"
+              @update:value="handleMenuSelect"
+            />
+          </n-layout-sider>
+          <n-layout-content>
+            <router-view />
+          </n-layout-content>
+        </n-layout>
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>
@@ -20,7 +22,7 @@
 <script setup>
 import { ref, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NConfigProvider, NMessageProvider, NLayout, NLayoutSider, NLayoutContent, NMenu } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, NLayout, NLayoutSider, NLayoutContent, NMenu } from 'naive-ui'
 import { HomeOutline, SettingsOutline, PlayOutline, TimeOutline } from '@vicons/ionicons5'
 
 const router = useRouter()

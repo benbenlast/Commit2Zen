@@ -87,7 +87,7 @@ const loadReports = async () => {
 
 const viewReport = async (report) => {
   try {
-    const content = await invoke('read_file', { path: report.path })
+    const content = await invoke('read_report', { path: report.path })
     selectedReport.value = JSON.parse(content)
     showDetail.value = true
   } catch (e) {

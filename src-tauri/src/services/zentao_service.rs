@@ -33,8 +33,11 @@ pub async fn get_projects(url: &str, token: &str) -> Result<Vec<ZentaoProject>, 
     let json: serde_json::Value = response.json().await
         .map_err(|e| format!("解析响应失败: {}", e))?;
 
+    eprintln!("[禅道] 项目列表原始响应: {}", json);
+
     let mut projects = Vec::new();
-    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+    // 禅道 API 返回的是 {"projects": [...], "total": N, ...}
+    if let Some(data) = json.get("projects").and_then(|d| d.as_array()) {
         for item in data {
             if let (Some(id), Some(name), Some(code)) = (
                 item["id"].as_u64().map(|v| v as u32),
@@ -48,8 +51,11 @@ pub async fn get_projects(url: &str, token: &str) -> Result<Vec<ZentaoProject>, 
                 });
             }
         }
+    } else {
+        eprintln!("[禅道] 未找到 projects 字段或不是数组");
     }
 
+    eprintln!("[禅道] 解析到 {} 个项目", projects.len());
     Ok(projects)
 }
 
@@ -84,6 +90,9 @@ async fn try_create_task(
     task_data: &TaskPayload,
 ) -> Result<TaskCreateResult, String> {
     let client = Client::new();
+
+    eprintln!("[禅道] 创建任务 payload: {:?}", task_data);
+
     let response = client
         .post(&format!("{}/api.php/v1/tasks", url))
         .header("Token", token)
@@ -95,7 +104,15 @@ async fn try_create_task(
     let json: serde_json::Value = response.json().await
         .map_err(|e| format!("解析响应失败: {}", e))?;
 
-    if let Some(task_id) = json.get("taskID").and_then(|v| v.as_u64()) {
+    eprintln!("[禅道] 创建任务响应: {}", json);
+
+    // 禅道不同版本返回的字段名不同：
+    // 旧版本: taskID
+    // 新版本: id (直接返回任务对象)
+    let task_id = json.get("taskID").and_then(|v| v.as_u64())
+        .or_else(|| json.get("id").and_then(|v| v.as_u64()));
+
+    if let Some(task_id) = task_id {
         Ok(TaskCreateResult {
             task_id: task_id as u32,
             task_url: format!("{}/task-view-{}.html", url, task_id),
@@ -106,15 +123,30 @@ async fn try_create_task(
 }
 
 pub fn build_task_description(branch: &str, commits: &[Commit]) -> String {
-    let mut desc = format!("## 分支: {}\n\n", branch);
-    desc.push_str(&format!("**提交数**: {}\n\n", commits.len()));
+    let mut desc = String::new();
+
+    desc.push_str("<h3>提交记录</h3>\n");
+    desc.push_str("<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse;width:100%;'>\n");
+    desc.push_str("<tr style='background:#f0f0f0;'>\n");
+    desc.push_str("<th>作者</th><th>日期</th><th>提交信息</th>\n");
+    desc.push_str("</tr>\n");
 
     for commit in commits {
-        desc.push_str(&format!(
-            "- `{}` {} - {}\n",
-            commit.hash, commit.author, commit.message
-        ));
+        let date = commit.date.split(' ').next().unwrap_or(&commit.date);
+        desc.push_str("<tr>\n");
+        desc.push_str(&format!("<td>{}</td>\n", commit.author));
+        desc.push_str(&format!("<td>{}</td>\n", date));
+        // 转义 HTML 特殊字符
+        let msg = commit.message
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        desc.push_str(&format!("<td>{}</td>\n", msg));
+        desc.push_str("</tr>\n");
     }
+
+    desc.push_str("</table>\n");
+    desc.push_str(&format!("<p><strong>提交数</strong>: {} | <strong>分支</strong>: {}</p>\n", commits.len(), branch));
 
     desc
 }
@@ -126,13 +158,17 @@ pub fn build_task_payload(
     assigned_to: &str,
     task_type: &str,
 ) -> TaskPayload {
+    // 从第一条提交提取作者，用于任务名称
+    let author = commits.first().map(|c| c.author.as_str()).unwrap_or("未知");
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+
     TaskPayload {
-        name: format!("[{}] 工作内容汇总", branch),
+        name: format!("[{}] {} - 开发任务 ({})", branch, author, date),
         desc: build_task_description(branch, commits),
         project: project_id,
         assigned_to: assigned_to.to_string(),
         task_type: task_type.to_string(),
-        est_started: chrono::Local::now().format("%Y-%m-%d").to_string(),
-        deadline: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        est_started: date.clone(),
+        deadline: date,
     }
 }

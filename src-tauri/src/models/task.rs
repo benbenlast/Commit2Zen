@@ -5,9 +5,11 @@ pub struct TaskPayload {
     pub name: String,
     pub desc: String,
     pub project: u32,
+    #[serde(rename = "assignedTo")]
     pub assigned_to: String,
     #[serde(rename = "type")]
     pub task_type: String,
+    #[serde(rename = "estStarted")]
     pub est_started: String,
     pub deadline: String,
 }

@@ -11,15 +11,38 @@
     <n-card v-if="currentStep === 1" title="选择 Git 项目">
       <n-space vertical>
         <n-space>
-          <n-button @click="scanRepos" :loading="scanning">
-            扫描本地仓库
+          <n-button @click="selectAndScanFolder" :loading="isScanning" type="primary">
+            📁 选择扫描目录
           </n-button>
           <n-input v-model:value="manualPath" placeholder="或手动输入路径" style="width: 400px;" />
-          <n-button @click="selectManual">浏览...</n-button>
+          <n-button @click="scanManualPath" :loading="isScanning">扫描此目录</n-button>
         </n-space>
 
-        <n-list v-if="repos.length > 0" bordered>
-          <n-list-item v-for="repo in repos" :key="repo.path">
+        <!-- 扫描进度 -->
+        <n-card v-if="scanProgress" size="small" :bordered="false">
+          <n-space vertical>
+            <n-progress
+              type="line"
+              :percentage="Math.round(scanProgress.percentage)"
+              :show-indicator="true"
+              :status="scanProgress.status === 'cancelled' ? 'error' : 'success'"
+            />
+            <n-text depth="3" v-if="scanProgress.current_directory">
+              正在扫描: {{ scanProgress.current_directory }}
+            </n-text>
+            <n-space justify="space-between">
+              <n-text depth="3">
+                已扫描 {{ scanProgress.directoriesScanned }} 个目录，发现 {{ scanProgress.reposFound }} 个仓库
+              </n-text>
+              <n-button v-if="isScanning" size="small" type="error" @click="cancelScan">
+                取消扫描
+              </n-button>
+            </n-space>
+          </n-space>
+        </n-card>
+
+        <n-list v-if="gitStore.scannedRepos.length > 0" bordered>
+          <n-list-item v-for="repo in gitStore.scannedRepos" :key="repo.path">
             <n-space justify="space-between" align="center">
               <div>
                 <n-text strong>{{ repo.name }}</n-text>
@@ -41,36 +64,53 @@
     <!-- Step 2: Zentao Configuration -->
     <n-card v-if="currentStep === 2" title="禅道项目配置">
       <n-space vertical>
-        <n-form :model="zentaoForm" label-placement="left" label-width="100">
-          <n-form-item label="禅道地址">
-            <n-input v-model:value="zentaoForm.url" placeholder="http://192.168.1.23/zentao" />
-          </n-form-item>
-          <n-form-item label="账号">
-            <n-input v-model:value="zentaoForm.account" />
-          </n-form-item>
-          <n-form-item label="密码">
-            <n-input v-model:value="zentaoForm.password" type="password" show-password-on="click" />
-          </n-form-item>
-        </n-form>
+        <!-- 选择已保存的禅道账号 -->
+        <n-text strong>选择禅道账号</n-text>
+        <n-radio-group v-model:value="selectedAccountId" @update:value="onAccountSelected">
+          <n-space vertical>
+            <n-radio v-for="account in configStore.zentaoAccounts" :key="account.id" :value="account.id">
+              {{ account.name }} ({{ account.account }})
+            </n-radio>
+          </n-space>
+        </n-radio-group>
+        <n-empty v-if="configStore.zentaoAccounts.length === 0" description="暂无保存的账号，请先去配置页添加" />
+        
+        <n-button @click="router.push({ name: 'config' })" secondary size="small">
+          管理账号
+        </n-button>
 
-        <n-space>
-          <n-button @click="testConnection" :loading="connecting">
-            测试连接
-          </n-button>
-        </n-space>
+        <!-- 选择账号后显示项目选择器 -->
+        <template v-if="selectedAccount">
+          <n-divider />
+          
+          <n-space v-if="loginStatus === 'logging_in'">
+            <n-spin size="small" />
+            <n-text>连接中...</n-text>
+          </n-space>
 
-        <n-select
-          v-if="zentaoProjects.length > 0"
-          v-model:value="selectedProjectId"
-          :options="projectOptions"
-          placeholder="选择目标项目"
-          style="width: 400px;"
-        />
+          <n-alert v-if="loginStatus === 'error'" type="error">
+            {{ loginError }}
+          </n-alert>
 
-        <n-space v-if="zentaoForm.token && selectedProjectId">
-          <n-tag type="success">已连接并选择项目</n-tag>
-          <n-button @click="collectAndPreview" :loading="collecting">下一步：预览</n-button>
-        </n-space>
+          <n-alert v-if="loginStatus === 'connected'" type="success">
+            ✓ 已连接 - {{ selectedAccount.account }}@{{ selectedAccount.name }}
+          </n-alert>
+
+          <n-form-item v-if="loginStatus === 'connected'" label="选择目标项目">
+            <n-select
+              v-model:value="selectedProjectId"
+              :options="projectOptions"
+              :loading="projectsLoading"
+              placeholder="选择目标项目"
+              style="width: 400px;"
+            />
+          </n-form-item>
+
+          <n-space v-if="loginStatus === 'connected' && selectedProjectId">
+            <n-tag type="success">已选择项目</n-tag>
+            <n-button @click="collectAndPreview" :loading="collecting" type="primary">下一步：预览</n-button>
+          </n-space>
+        </template>
       </n-space>
     </n-card>
 
@@ -134,14 +174,18 @@
 </template>
 
 <script setup>
-import { ref, computed, h } from 'vue'
+import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { useGitStore } from '@/stores/git.js'
+import { useConfigStore } from '@/stores/config.js'
 
 const router = useRouter()
 const message = useMessage()
+const gitStore = useGitStore()
+const configStore = useConfigStore()
 
 // Step state
 const currentStep = ref(1)
@@ -153,14 +197,22 @@ const scanning = ref(false)
 const manualPath = ref('')
 const selectedGitRepo = ref(null)
 
+// 扫描状态
+const scanProgress = computed(() => gitStore.scanProgress)
+const isScanning = computed(() => gitStore.isScanning)
+
 // Zentao state
-const zentaoForm = ref({ url: '', account: '', password: '', token: '' })
-const connecting = ref(false)
+const selectedAccountId = ref(null)
+const selectedAccount = ref(null)
+const loginStatus = ref('idle') // idle | logging_in | connected | error
+const loginError = ref('')
+const projectsLoading = ref(false)
 const zentaoProjects = ref([])
 const selectedProjectId = ref(null)
+const connecting = ref(false)
+const collecting = ref(false)
 
 // Preview state
-const collecting = ref(false)
 const commits = ref([])
 const branchGroups = ref([])
 
@@ -215,6 +267,36 @@ const resultColumns = [
 ]
 
 // Methods
+const selectAndScanFolder = async () => {
+  try {
+    const selected = await open({ directory: true })
+    console.log('[调试] 选择的目录:', selected)
+    if (selected) {
+      await gitStore.startFolderScan(selected)
+      message.success('扫描已启动')
+    }
+  } catch (e) {
+    console.error('[调试] 选择失败:', e)
+    message.error(`选择失败: ${e}`)
+  }
+}
+
+const scanManualPath = async () => {
+  if (manualPath.value.trim()) {
+    try {
+      await gitStore.startFolderScan(manualPath.value.trim())
+      message.success('扫描已启动')
+    } catch (e) {
+      message.error(`扫描失败: ${e}`)
+    }
+  }
+}
+
+const cancelScan = async () => {
+  await gitStore.cancelScan()
+  message.info('扫描已取消')
+}
+
 const scanRepos = async () => {
   scanning.value = true
   try {
@@ -228,19 +310,6 @@ const scanRepos = async () => {
     message.error(`扫描失败: ${e}`)
   } finally {
     scanning.value = false
-  }
-}
-
-const selectManual = async () => {
-  try {
-    const selected = await open({ directory: true })
-    if (selected) {
-      manualPath.value = selected
-      selectedGitRepo.value = { path: selected, name: selected.split(/[\\/]/).pop() }
-      message.success(`已选择: ${selectedGitRepo.value.name}`)
-    }
-  } catch (e) {
-    message.error(`选择失败: ${e}`)
   }
 }
 
@@ -260,55 +329,91 @@ const selectGitProject = async (repo) => {
   }
 }
 
-const testConnection = async () => {
-  if (!zentaoForm.value.url || !zentaoForm.value.account || !zentaoForm.value.password) {
-    message.error('请填写完整的禅道信息')
+const onAccountSelected = async (accountId) => {
+  // 查找选中的账号
+  const account = configStore.zentaoAccounts.find(a => a.id === accountId)
+  if (!account) {
+    loginStatus.value = 'error'
+    loginError.value = '未找到选中的账号'
     return
   }
 
-  connecting.value = true
-  try {
-    zentaoForm.value.token = await invoke('zentao_login', {
-      url: zentaoForm.value.url,
-      account: zentaoForm.value.account,
-      password: zentaoForm.value.password,
-    })
-    message.success('禅道连接成功')
+  selectedAccount.value = account
+  loginStatus.value = 'logging_in'
+  loginError.value = ''
+  projectsLoading.value = true
 
-    // Fetch projects
-    zentaoProjects.value = await invoke('zentao_get_projects', {
-      url: zentaoForm.value.url,
-      token: zentaoForm.value.token,
+  try {
+    console.log('[禅道] 尝试登录:', account.url, account.account)
+    // 使用账号信息登录
+    const token = await invoke('zentao_login', {
+      url: account.url,
+      account: account.account,
+      password: account.password,
     })
+
+    console.log('[禅道] 登录成功，token:', token)
+    loginStatus.value = 'connected'
+    message.success(`禅道连接成功: ${account.name}`)
+
+    // 获取项目列表
+    console.log('[禅道] 获取项目列表:', account.url, token)
+    const projects = await invoke('zentao_get_projects', {
+      url: account.url,
+      token: token,
+    })
+    console.log('[禅道] 项目列表返回:', JSON.stringify(projects))
+
+    zentaoProjects.value = projects
+    selectedProjectId.value = null
 
     if (zentaoProjects.value.length > 0) {
       message.success(`获取到 ${zentaoProjects.value.length} 个项目`)
+    } else {
+      message.warning('未找到可用项目')
     }
   } catch (e) {
+    console.error('[禅道] 错误:', e)
+    loginStatus.value = 'error'
+    loginError.value = `连接失败: ${e}`
     message.error(`连接失败: ${e}`)
   } finally {
-    connecting.value = false
+    projectsLoading.value = false
   }
 }
 
 const collectAndPreview = async () => {
+  if (!selectedGitRepo.value) {
+    message.error('请先选择 Git 项目')
+    return
+  }
+
   collecting.value = true
   try {
+    // 重新收集提交记录
+    commits.value = await invoke('collect_git_log', {
+      projectPath: selectedGitRepo.value.path,
+      maxCommits: configStore.git.max_commits,
+    })
+
+    // 按分支分组
     branchGroups.value = await invoke('group_commits_by_branch', {
       commits: commits.value,
-      branchPattern: null,
+      branchPattern: configStore.git.branchPattern || null,
     })
+
     currentStep.value = 3
+    message.success(`预览已加载: ${commits.value.length} 条提交`)
   } catch (e) {
-    message.error(`分支分组失败: ${e}`)
+    message.error(`加载预览失败: ${e}`)
   } finally {
     collecting.value = false
   }
 }
 
 const executeWorkflow = async () => {
-  if (!selectedGitRepo.value || !selectedProject.value) {
-    message.error('请选择 Git 项目和禅道目标')
+  if (!selectedGitRepo.value || !selectedProject.value || !selectedAccount.value) {
+    message.error('请完成所有选择')
     return
   }
 
@@ -317,22 +422,19 @@ const executeWorkflow = async () => {
   currentStep.value = 4
 
   try {
-    const config = {
-      zentao: {
-        url: zentaoForm.value.url,
-        account: zentaoForm.value.account,
-        password: zentaoForm.value.password,
-        project_id: selectedProject.value.id,
-        assigned_to: zentaoForm.value.account,
-        task_type: 'dev',
-      },
-      git: { max_commits: 100, include_merged: false, branch_pattern: '.*' },
-      output: { report_dir: 'reports', verbose: true },
-    }
-
     const report = await invoke('execute_full_workflow', {
-      config,
+      account: selectedAccount.value,
+      projectId: selectedProject.value.id,
       projectPath: selectedGitRepo.value.path,
+      gitConfig: {
+        max_commits: configStore.git.max_commits,
+        include_merged: configStore.git.include_merged,
+        branch_pattern: configStore.git.branch_pattern || '.*',
+      },
+      outputConfig: {
+        report_dir: configStore.output.report_dir,
+        verbose: configStore.output.verbose,
+      },
     })
 
     taskResults.value = report.branches
@@ -350,11 +452,20 @@ const resetWorkflow = () => {
   currentStep.value = 1
   stepStatus.value = 'process'
   selectedGitRepo.value = null
-  zentaoForm.value = { url: '', account: '', password: '', token: '' }
+  selectedAccountId.value = null
+  selectedAccount.value = null
+  loginStatus.value = 'idle'
+  loginError.value = ''
   zentaoProjects.value = []
   selectedProjectId.value = null
   commits.value = []
   branchGroups.value = []
   taskResults.value = []
+  gitStore.resetScan()
 }
+
+// 组件卸载时清理事件监听
+onUnmounted(() => {
+  gitStore.resetScan()
+})
 </script>

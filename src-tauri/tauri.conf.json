@@ -4,10 +4,10 @@
   "version": "2.0.0",
   "identifier": "com.commit2zen.app",
   "build": {
-    "beforeDevCommand": "cd src && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd src && npm run build",
-    "frontendDist": "../src/dist"
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
