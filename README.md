@@ -2,85 +2,78 @@
 
 自动收集 Git 提交记录,按分支分组汇总,并在禅道上创建任务。
 
-## 功能特性
+## 版本
 
-- ✅ 自动收集 Git 提交记录
-- ✅ 按分支分组汇总工作内容
-- ✅ 通过禅道 REST API 创建任务
-- ✅ 生成执行报告 (JSON)
-- ✅ 零外部依赖,开箱即用
+- **v2.0** - Tauri 桌面应用 (推荐)
+- **v1.0** - Node.js CLI 工具 (备选)
 
-## 前置要求
+---
+
+## 桌面应用 (v2.0) - 推荐
+
+基于 Tauri 2 + Vue 3 的现代化桌面应用。
+
+### 功能特性
+
+- 可视化 Git 项目扫描与选择
+- 禅道连接测试与项目选择
+- Commit 记录预览与分支汇总
+- 一键执行: 自动创建禅道任务
+- 历史报告查看
+
+### 前置要求
+
+- [Rust](https://rustup.rs/) (用于构建 Tauri 应用)
+- [Node.js](https://nodejs.org/) 18+
+
+### 安装
+
+```bash
+# 安装前端依赖
+npm install
+
+# 安装 Tauri CLI
+cargo install tauri-cli
+```
+
+### 开发模式
+
+```bash
+cargo tauri dev
+```
+
+### 构建安装包
+
+```bash
+cargo tauri build
+```
+
+构建产物位于 `src-tauri/target/release/bundle/`
+
+---
+
+## CLI 工具 (v1.0) - 备选
+
+### 前置要求
 
 - Node.js 18+ (内置 fetch API)
 - 可访问的禅道实例
 
-## 安装和使用
-
-### 1. 配置
-
-复制配置示例并填入你的禅道信息:
+### 使用
 
 ```bash
+# 1. 配置
 cp config.example.json config.json
-```
+# 编辑 config.json
 
-编辑 `config.json`:
-
-```json
-{
-  "zentao": {
-    "url": "http://your-zentao.com",
-    "account": "your-account",
-    "password": "your-password",
-    "projectId": 1,
-    "assignedTo": "your-account",
-    "taskType": "dev"
-  }
-}
-```
-
-### 2. 运行
-
-```bash
+# 2. 运行
 node commit2zen.mjs
+
+# 或指定项目路径
+node commit2zen.mjs /path/to/project
 ```
 
-### 3. 查看结果
-
-- 控制台输出执行摘要
-- 详细报告保存在 `reports/YYYY-MM-DD-report.json`
-- 登录禅道查看创建的任务
-
-## 指定项目路径
-
-默认情况下,Commit2Zen 统计当前目录的 Git 提交。你可以通过以下方式指定任意项目:
-
-### 方式 1: 配置文件
-
-编辑 `config.json`:
-
-```json
-{
-  "projectPath": "/path/to/your/project",
-  "zentao": { ... }
-}
-```
-
-### 方式 2: 命令行参数
-
-```bash
-node commit2zen.mjs /path/to/your/project
-```
-
-命令行参数优先级高于配置文件。
-
-### 方式 3: 当前目录 (默认)
-
-```bash
-cd /path/to/your/project
-node commit2zen.mjs
-```
+---
 
 ## 配置选项
 
