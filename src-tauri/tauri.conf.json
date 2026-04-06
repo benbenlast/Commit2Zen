@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/main/crates/tauri-config-schema/schema.json",
+  "productName": "Commit2Zen",
+  "version": "2.0.0",
+  "identifier": "com.commit2zen.app",
+  "build": {
+    "beforeDevCommand": "cd src && npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "cd src && npm run build",
+    "frontendDist": "../src/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Commit2Zen",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}
