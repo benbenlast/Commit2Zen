@@ -1,9 +1,9 @@
 use git2::{Repository, Sort};
-use crate::models::{Commit, BranchGroup, BranchSummary, CommitTypes, DateRange};
+use crate::models::{Commit, BranchGroup, BranchSummary, CommitTypes, DateRange, DateFilter};
 use std::collections::{HashMap, HashSet};
 use regex::Regex;
 
-pub fn collect_commits(repo_path: &str, max_commits: usize) -> Result<Vec<Commit>, String> {
+pub fn collect_commits(repo_path: &str, max_commits: usize, date_filter: Option<DateFilter>) -> Result<Vec<Commit>, String> {
     let repo = Repository::open(repo_path)
         .map_err(|e| format!("无法打开仓库: {}", e))?;
 
@@ -29,6 +29,21 @@ pub fn collect_commits(repo_path: &str, max_commits: usize) -> Result<Vec<Commit
             .to_string();
 
         let timestamp = commit.time().seconds();
+
+        // 日期范围筛选
+        if let Some(filter) = &date_filter {
+            if let Some(start) = filter.start {
+                if timestamp < start {
+                    continue;
+                }
+            }
+            if let Some(end) = filter.end {
+                if timestamp > end {
+                    continue;
+                }
+            }
+        }
+
         let date = chrono::DateTime::from_timestamp(timestamp, 0)
             .map(|dt| dt.to_rfc3339())
             .unwrap_or_else(|| "unknown".to_string());

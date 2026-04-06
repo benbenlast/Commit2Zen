@@ -1,5 +1,5 @@
 use tauri::command;
-use crate::models::{Commit, BranchGroup};
+use crate::models::{Commit, BranchGroup, DateFilter};
 use crate::services::{collect_commits, group_by_branches};
 use crate::services::scanner;
 use std::collections::HashMap;
@@ -100,8 +100,12 @@ fn scan_directory(dir: &Path, repos: &mut Vec<GitRepoInfo>, depth: usize, max_de
 }
 
 #[command]
-pub async fn collect_git_log(project_path: String, max_commits: usize) -> Result<Vec<Commit>, String> {
-    collect_commits(&project_path, max_commits)
+pub async fn collect_git_log(
+    project_path: String,
+    max_commits: usize,
+    date_filter: Option<DateFilter>,
+) -> Result<Vec<Commit>, String> {
+    collect_commits(&project_path, max_commits, date_filter)
 }
 
 #[command]

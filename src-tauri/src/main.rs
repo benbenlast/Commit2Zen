@@ -4,7 +4,7 @@ mod commands;
 mod services;
 mod models;
 
-use models::{AppConfig, BranchReport, ZentaoAccount, GitConfig, OutputConfig};
+use models::{AppConfig, BranchReport, ZentaoAccount, GitConfig, OutputConfig, DateFilter};
 use services::{collect_commits, group_by_branches, login, create_task, build_task_payload, generate_report, save_report};
 use commands::git::ScanCancelMap;
 use std::sync::{Arc, Mutex};
@@ -17,9 +17,10 @@ async fn execute_full_workflow(
     project_path: String,
     git_config: GitConfig,
     output_config: OutputConfig,
+    date_filter: Option<DateFilter>,
 ) -> Result<crate::models::ExecutionReport, String> {
     // 1. 收集 Git 提交
-    let commits = collect_commits(&project_path, git_config.max_commits)?;
+    let commits = collect_commits(&project_path, git_config.max_commits, date_filter)?;
 
     // 2. 按分支分组
     let branch_groups = group_by_branches(commits, Some(&git_config.branch_pattern));

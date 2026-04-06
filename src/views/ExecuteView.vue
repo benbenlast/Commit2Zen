@@ -18,6 +18,46 @@
           <n-button @click="scanManualPath" :loading="isScanning">扫描此目录</n-button>
         </n-space>
 
+        <!-- 日期范围筛选 -->
+        <n-divider />
+        <n-space vertical>
+          <n-text strong>提交日期范围</n-text>
+          <n-space>
+            <n-button 
+              :type="dateFilterType === 'thisWeek' ? 'primary' : 'default'" 
+              @click="selectThisWeek"
+              size="small"
+            >
+              本周
+            </n-button>
+            <n-button 
+              :type="dateFilterType === 'lastWeek' ? 'primary' : 'default'" 
+              @click="selectLastWeek"
+              size="small"
+            >
+              上周
+            </n-button>
+            <n-button 
+              :type="dateFilterType === 'custom' ? 'primary' : 'default'" 
+              @click="selectCustomDate"
+              size="small"
+            >
+              自定义
+            </n-button>
+            <n-date-picker
+              v-if="dateFilterType === 'custom'"
+              v-model:value="customDateRange"
+              type="daterange"
+              placeholder="选择日期范围"
+              style="width: 300px;"
+              clearable
+            />
+            <n-text v-if="dateFilterValue" depth="3" style="font-size: 12px;">
+              已筛选: {{ new Date(dateFilterValue.start * 1000).toLocaleDateString() }} ~ {{ new Date(dateFilterValue.end * 1000).toLocaleDateString() }}
+            </n-text>
+          </n-space>
+        </n-space>
+
         <!-- 扫描进度 -->
         <n-card v-if="scanProgress" size="small" :bordered="false">
           <n-space vertical>
@@ -197,6 +237,10 @@ const scanning = ref(false)
 const manualPath = ref('')
 const selectedGitRepo = ref(null)
 
+// 日期筛选状态
+const dateFilterType = ref('custom') // 'thisWeek' | 'lastWeek' | 'custom'
+const customDateRange = ref(null) // [startTimestamp, endTimestamp]
+
 // 扫描状态
 const scanProgress = computed(() => gitStore.scanProgress)
 const isScanning = computed(() => gitStore.isScanning)
@@ -230,6 +274,48 @@ const selectedProject = computed(() =>
 
 const successCount = computed(() => taskResults.value.filter(r => r.task_created).length)
 const failCount = computed(() => taskResults.value.filter(r => !r.task_created).length)
+
+// 日期范围计算
+const dateFilterValue = computed(() => {
+  const now = new Date()
+  let start, end
+
+  // 获取本周一（周一为一周的开始）
+  const getThisMonday = (date) => {
+    const day = date.getDay()
+    const diff = day === 0 ? -6 : 1 - day // 周日当作上周
+    const monday = new Date(date)
+    monday.setDate(date.getDate() + diff)
+    monday.setHours(0, 0, 0, 0)
+    return monday
+  }
+
+  if (dateFilterType.value === 'thisWeek') {
+    start = getThisMonday(now)
+    end = new Date(now)
+    end.setHours(23, 59, 59, 999)
+  } else if (dateFilterType.value === 'lastWeek') {
+    const thisMonday = getThisMonday(now)
+    start = new Date(thisMonday)
+    start.setDate(thisMonday.getDate() - 7)
+    end = new Date(thisMonday)
+    end.setDate(thisMonday.getDate() - 1)
+    end.setHours(23, 59, 59, 999)
+  } else if (dateFilterType.value === 'custom' && customDateRange.value) {
+    start = new Date(customDateRange.value[0])
+    end = new Date(customDateRange.value[1])
+  } else {
+    return null
+  }
+
+  if (!start || !end) return null
+
+  // 转换为 Unix 时间戳（秒）
+  return {
+    start: Math.floor(start.getTime() / 1000),
+    end: Math.floor(end.getTime() / 1000),
+  }
+})
 
 // Commit table columns
 const commitColumns = [
@@ -267,6 +353,18 @@ const resultColumns = [
 ]
 
 // Methods
+const selectThisWeek = () => {
+  dateFilterType.value = 'thisWeek'
+}
+
+const selectLastWeek = () => {
+  dateFilterType.value = 'lastWeek'
+}
+
+const selectCustomDate = () => {
+  dateFilterType.value = 'custom'
+}
+
 const selectAndScanFolder = async () => {
   try {
     const selected = await open({ directory: true })
@@ -322,6 +420,7 @@ const selectGitProject = async (repo) => {
     commits.value = await invoke('collect_git_log', {
       projectPath: repo.path,
       maxCommits: 100,
+      dateFilter: dateFilterValue.value,
     })
     message.success(`获取到 ${commits.value.length} 条提交记录`)
   } catch (e) {
@@ -394,6 +493,7 @@ const collectAndPreview = async () => {
     commits.value = await invoke('collect_git_log', {
       projectPath: selectedGitRepo.value.path,
       maxCommits: configStore.git.max_commits,
+      dateFilter: dateFilterValue.value,
     })
 
     // 按分支分组
@@ -435,6 +535,7 @@ const executeWorkflow = async () => {
         report_dir: configStore.output.report_dir,
         verbose: configStore.output.verbose,
       },
+      dateFilter: dateFilterValue.value,
     })
 
     taskResults.value = report.branches
