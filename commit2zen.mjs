@@ -124,11 +124,8 @@ function isGitRepo() {
 }
 
 function collectGitLog(maxCommits = 100) {
-  if (!isGitRepo()) {
-    console.error('❌ 当前目录不是 Git 仓库');
-    process.exit(1);
-  }
-
+  // isGitRepo 检查已在 validateProjectPath 中完成
+  
   if (!Number.isInteger(maxCommits) || maxCommits < 1) {
     console.error('❌ maxCommits 必须是正整数');
     process.exit(1);
@@ -466,9 +463,18 @@ async function main() {
   console.log('   项目 ID:', config.zentao.projectId);
   console.log('');
 
-  // 2. 收集 Git 日志
+  // 2. 解析并验证项目路径
+  const projectPath = resolveProjectPath(config.projectPath);
+  console.log('📁 项目路径:', projectPath);
+  const originalCwd = validateProjectPath(projectPath);
+  console.log('✅ 项目验证通过\n');
+
+  // 3. 收集 Git 日志
   console.log('📦 收集 Git 提交记录...');
   const commits = collectGitLog(config.git.maxCommits);
+  
+  // 恢复原目录
+  process.chdir(originalCwd);
 
   if (commits.length === 0) {
     console.log('ℹ️  没有需要处理的提交');
