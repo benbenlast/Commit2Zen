@@ -5,20 +5,20 @@ description = "Git Commit History Manager with Zentao Integration"
 authors = ["Commit2Zen Team"]
 edition = "2021"
 
-[lib]
-name = "commit2zen_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+[[bin]]
+name = "commit2zen"
+path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-reqwest = { version = "0.12", features = ["json"] }
-tokio = { version = "1", features = ["full"] }
-git2 = "0.19"
-chrono = { version = "0.4", features = ["serde"] }
-dirs = "5.0"
-regex = "1.0"
+tauri = { version = "2.0.0", features = [] }
+serde = { version = "1.0.200", features = ["derive"] }
+serde_json = "1.0.116"
+reqwest = { version = "0.12.4", features = ["json"] }
+tokio = { version = "1.37", features = ["full"] }
+git2 = "0.19.0"
+chrono = { version = "0.4.38", features = ["serde"] }
+dirs = "5.0.1"
+regex = "1.10.4"

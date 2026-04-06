@@ -1,29 +1,18 @@
 # Commit2Zen
 
-自动收集 Git 提交记录,按分支分组汇总,并在禅道上创建任务。
+Git 提交记录管理与禅道任务自动化工具。
 
-## 版本
+## 功能特性
 
-- **v2.0** - Tauri 桌面应用 (推荐)
-- **v1.0** - Node.js CLI 工具 (备选)
-
----
-
-## 桌面应用 (v2.0) - 推荐
-
-基于 Tauri 2 + Vue 3 的现代化桌面应用。
-
-### 功能特性
-
-- 可视化 Git 项目扫描与选择
+- 本地 Git 仓库扫描发现
 - 禅道连接测试与项目选择
 - Commit 记录预览与分支汇总
-- 一键执行: 自动创建禅道任务
+- 一键创建禅道任务
 - 历史报告查看
 
 ### 前置要求
 
-- [Rust](https://rustup.rs/) (用于构建 Tauri 应用)
+- [Rust](https://rustup.rs/)
 - [Node.js](https://nodejs.org/) 18+
 
 ### 安装
@@ -52,34 +41,10 @@ cargo tauri build
 
 ---
 
-## CLI 工具 (v1.0) - 备选
-
-### 前置要求
-
-- Node.js 18+ (内置 fetch API)
-- 可访问的禅道实例
-
-### 使用
-
-```bash
-# 1. 配置
-cp config.example.json config.json
-# 编辑 config.json
-
-# 2. 运行
-node commit2zen.mjs
-
-# 或指定项目路径
-node commit2zen.mjs /path/to/project
-```
-
----
-
 ## 配置选项
 
 | 字段 | 必填 | 说明 | 默认值 |
 |------|------|------|--------|
-| projectPath | ❌ | 项目路径 | 当前目录 |
 | zentao.url | ✅ | 禅道地址 | - |
 | zentao.account | ✅ | 禅道账号 | - |
 | zentao.password | ✅ | 禅道密码 | - |
