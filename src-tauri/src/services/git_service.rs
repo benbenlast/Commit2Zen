@@ -84,29 +84,21 @@ fn get_commit_branches(repo: &Repository, commit: &git2::Commit) -> Vec<String> 
 
 fn get_commit_files(repo: &Repository, commit: &git2::Commit) -> Vec<String> {
     if let Some(parent) = commit.parent(0).ok() {
-        let diff = commit.tree().ok().and_then(|tree| {
-            parent.tree().ok().and_then(|parent_tree| {
-                tree.diff_to_tree(&parent_tree, None, None, false).ok()
-            })
-        });
-
-        if let Some(diff) = diff {
-            let mut files = Vec::new();
-            for delta in diff.deltas() {
-                if let Some(path) = delta.new_file().path() {
-                    if let Some(path_str) = path.to_str() {
-                        files.push(path_str.to_string());
-                    }
-                }
+        if let (Ok(tree), Ok(parent_tree)) = (commit.tree(), parent.tree()) {
+            if let Ok(diff) = repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), None) {
+                let files: Vec<String> = diff.deltas()
+                    .filter_map(|delta| delta.new_file().path())
+                    .filter_map(|p: &std::path::Path| p.to_str().map(String::from))
+                    .collect();
+                return files;
             }
-            return files;
         }
     }
 
     // 初始提交，返回所有文件
     if commit.parent_count() == 0 {
         if let Ok(tree) = commit.tree() {
-            let mut files = Vec::new();
+            let mut files: Vec<String> = Vec::new();
             tree.walk(git2::TreeWalkMode::PreOrder, |_, entry| {
                 if let Some(name) = entry.name() {
                     files.push(name.to_string());

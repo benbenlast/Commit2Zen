@@ -45,7 +45,7 @@ onMounted(async () => {
     const history = await invoke('get_report_history', { reportDir: 'reports' })
     if (history.length > 0) {
       const latest = history[0]
-      const content = await invoke('read_file', { path: latest.path })
+      const content = await invoke('read_report', { path: latest.path })
       lastReport.value = JSON.parse(content)
     }
   } catch (e) {

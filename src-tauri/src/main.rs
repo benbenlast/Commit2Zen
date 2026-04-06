@@ -80,6 +80,7 @@ fn main() {
             commands::generate_report,
             commands::save_report_cmd,
             commands::get_report_history,
+            commands::read_report,
             execute_full_workflow,
         ])
         .run(tauri::generate_context!())

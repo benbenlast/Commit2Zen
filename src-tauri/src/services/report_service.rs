@@ -5,13 +5,14 @@ pub fn generate_report(branches: Vec<BranchReport>) -> ExecutionReport {
     let total_commits: usize = branches.iter().map(|b| b.commit_count).sum();
     let tasks_created = branches.iter().filter(|b| b.task_created).count();
     let tasks_failed = branches.iter().filter(|b| !b.task_created).count();
+    let total_branches = branches.len();
 
     ExecutionReport {
         timestamp: chrono::Local::now().to_rfc3339(),
         project: "Commit2Zen".to_string(),
         branches,
         summary: ReportSummary {
-            total_branches: branches.len(),
+            total_branches,
             total_commits,
             tasks_created,
             tasks_failed,
