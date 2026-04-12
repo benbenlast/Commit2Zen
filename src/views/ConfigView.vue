@@ -8,7 +8,7 @@
             导出配置
           </n-button>
           <n-button size="small" @click="triggerImport" :loading="importing">
-            <template #icon><n-icon><UploadOutline /></n-icon></template>
+            <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
             导入配置
           </n-button>
           <input
@@ -138,7 +138,7 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
-import { DownloadOutline, UploadOutline } from '@vicons/ionicons5'
+import { DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5'
 import { useConfigStore } from '../stores/config.js'
 
 const message = useMessage()

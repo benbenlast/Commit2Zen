@@ -96,7 +96,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
-import { useGraphic } from 'echarts'
 import { useLLMStore } from '@/stores/llm.js'
 
 const router = useRouter()

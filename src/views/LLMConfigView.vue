@@ -90,7 +90,6 @@
                   :min="0"
                   :max="2"
                   :step="0.1"
-                  :marks="{ 0: '0', 1: '1', 2: '2' }"
                   style="flex: 1;"
                 />
                 <n-input-number
@@ -98,7 +97,7 @@
                   :min="0"
                   :max="2"
                   :step="0.1"
-                  style="width: 80px;"
+                  style="width: 100px;"
                 />
               </n-space>
             </n-form-item>
@@ -136,45 +135,48 @@
     <n-card title="任务分配配置" style="margin-top: 24px;">
       <n-collapse :default-expanded-names="['task-assignments']">
         <n-collapse-item name="task-assignments" title="任务 → LLM 映射">
+          <template #header>
+            <n-space justify="space-between" style="width: 100%;">
+              <n-text strong>任务 → LLM 映射</n-text>
+              <n-switch v-model:value="taskAssignmentsEnabled" @update:value="onTaskAssignmentsToggle">
+                <template #checked>
+                  已启用
+                </template>
+                <template #unchecked>
+                  已禁用
+                </template>
+              </n-switch>
+            </n-space>
+          </template>
           <n-space vertical>
-            <n-descriptions :column="2" bordered size="small">
-              <n-descriptions-item label="Commit 摘要">
+            <n-space vertical v-for="task in taskList" :key="task.key" style="border: 1px solid #e0e0e6; border-radius: 8px; padding: 12px;">
+              <n-space justify="space-between" align="center">
+                <n-space align="center">
+                  <n-text strong>{{ task.label }}</n-text>
+                  <n-switch
+                    :value="taskAssignments[task.key]?.enabled ?? false"
+                    @update:value="(val) => toggleTaskTaskAssignment(task.key, val)"
+                    size="small"
+                  >
+                    <template #checked>
+                      启用
+                    </template>
+                    <template #unchecked>
+                      禁用
+                    </template>
+                  </n-switch>
+                </n-space>
                 <n-select
-                  v-model:value="taskAssignments.commitSummary"
+                  v-model:value="taskAssignments[task.key].provider"
                   :options="enabledProviderOptions"
                   placeholder="选择 LLM 服务商"
-                  style="width: 100%;"
-                  @update:value="(val) => updateTaskAssignment('commitSummary', val)"
+                  style="width: 200px;"
+                  :disabled="!(taskAssignments[task.key]?.enabled ?? false)"
+                  @update:value="(val) => updateTaskAssignment(task.key, val)"
                 />
-              </n-descriptions-item>
-              <n-descriptions-item label="任务描述">
-                <n-select
-                  v-model:value="taskAssignments.taskDescription"
-                  :options="enabledProviderOptions"
-                  placeholder="选择 LLM 服务商"
-                  style="width: 100%;"
-                  @update:value="(val) => updateTaskAssignment('taskDescription', val)"
-                />
-              </n-descriptions-item>
-              <n-descriptions-item label="分支建议">
-                <n-select
-                  v-model:value="taskAssignments.branchSuggestion"
-                  :options="enabledProviderOptions"
-                  placeholder="选择 LLM 服务商"
-                  style="width: 100%;"
-                  @update:value="(val) => updateTaskAssignment('branchSuggestion', val)"
-                />
-              </n-descriptions-item>
-              <n-descriptions-item label="趋势分析">
-                <n-select
-                  v-model:value="taskAssignments.trendAnalysis"
-                  :options="enabledProviderOptions"
-                  placeholder="选择 LLM 服务商"
-                  style="width: 100%;"
-                  @update:value="(val) => updateTaskAssignment('trendAnalysis', val)"
-                />
-              </n-descriptions-item>
-            </n-descriptions>
+              </n-space>
+              <n-text depth="3" style="font-size: 12px;">{{ task.description }}</n-text>
+            </n-space>
 
             <n-space>
               <n-button type="primary" @click="saveTaskAssignments" :loading="savingAssignments">
@@ -211,11 +213,36 @@ const providerTypeOptions = [
 ]
 
 const taskAssignments = ref({
-  commitSummary: null,
-  taskDescription: null,
-  branchSuggestion: null,
-  trendAnalysis: null,
+  commitSummary: { enabled: false, provider: null },
+  taskDescription: { enabled: false, provider: null },
+  branchSuggestion: { enabled: false, provider: null },
+  trendAnalysis: { enabled: false, provider: null },
 })
+
+const taskAssignmentsEnabled = ref(false)
+
+const taskList = [
+  {
+    key: 'commitSummary',
+    label: 'Commit 摘要',
+    description: '分析 Git 提交历史，生成项目变更摘要',
+  },
+  {
+    key: 'taskDescription',
+    label: '任务描述',
+    description: '为禅道任务自动生成结构化的任务描述',
+  },
+  {
+    key: 'branchSuggestion',
+    label: '分支建议',
+    description: '基于提交内容智能推荐分支名称',
+  },
+  {
+    key: 'trendAnalysis',
+    label: '趋势分析',
+    description: '分析项目开发趋势和活跃度统计',
+  },
+]
 
 const editForm = ref(null)
 
@@ -255,15 +282,17 @@ onMounted(async () => {
 function syncTaskAssignmentsFromStore() {
   const assignments = llmStore.taskAssignments || []
   taskAssignments.value = {
-    commitSummary: null,
-    taskDescription: null,
-    branchSuggestion: null,
-    trendAnalysis: null,
+    commitSummary: { enabled: false, provider: null },
+    taskDescription: { enabled: false, provider: null },
+    branchSuggestion: { enabled: false, provider: null },
+    trendAnalysis: { enabled: false, provider: null },
   }
+  taskAssignmentsEnabled.value = llmStore.llmConfig?.taskAssignment?.enabled ?? false
   for (const assignment of assignments) {
-    if (assignment.enabled) {
-      if (assignment.taskType in taskAssignments.value) {
-        taskAssignments.value[assignment.taskType] = assignment.providerType
+    if (assignment.taskType in taskAssignments.value) {
+      taskAssignments.value[assignment.taskType] = {
+        enabled: assignment.enabled,
+        provider: assignment.providerType || null,
       }
     }
   }
@@ -386,8 +415,26 @@ function resetProvider() {
   })
 }
 
+function toggleTaskTaskAssignment(taskType, enabled) {
+  taskAssignments.value[taskType].enabled = enabled
+  if (!enabled) {
+    taskAssignments.value[taskType].provider = null
+  }
+}
+
+function onTaskAssignmentsToggle(enabled) {
+  taskAssignmentsEnabled.value = enabled
+  if (!enabled) {
+    // 禁用所有任务分配
+    for (const key of Object.keys(taskAssignments.value)) {
+      taskAssignments.value[key].enabled = false
+      taskAssignments.value[key].provider = null
+    }
+  }
+}
+
 function updateTaskAssignment(taskType, providerType) {
-  taskAssignments.value[taskType] = providerType
+  taskAssignments.value[taskType].provider = providerType
 }
 
 async function saveTaskAssignments() {
@@ -400,17 +447,30 @@ async function saveTaskAssignments() {
       trendAnalysis: '趋势分析',
     }
 
-    for (const [taskType, providerType] of Object.entries(taskAssignments.value)) {
-      if (providerType) {
+    // 更新每个任务分配
+    for (const [taskType, config] of Object.entries(taskAssignments.value)) {
+      if (config.enabled && config.provider) {
         llmStore.setTaskAssignment({
           taskType,
-          providerType,
+          providerType: config.provider,
           description: taskLabels[taskType] || taskType,
-          enabled: true,
+          enabled: config.enabled,
         })
       } else {
-        llmStore.removeTaskAssignment(taskType)
+        llmStore.setTaskAssignment({
+          taskType,
+          providerType: null,
+          description: taskLabels[taskType] || taskType,
+          enabled: false,
+        })
       }
+    }
+
+    // 保存总启用状态
+    const manager = getLLMManager()
+    const config = manager.getConfig()
+    if (config && config.taskAssignment) {
+      config.taskAssignment.enabled = taskAssignmentsEnabled.value
     }
 
     await llmStore.saveConfig()
