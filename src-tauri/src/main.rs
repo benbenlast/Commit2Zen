@@ -3,8 +3,11 @@
 mod commands;
 mod services;
 mod models;
+mod errors;
 
-use models::{AppConfig, BranchReport, ZentaoAccount, GitConfig, OutputConfig, DateFilter};
+use errors::AppError;
+
+use models::{BranchReport, ZentaoAccount, GitConfig, OutputConfig, DateFilter};
 use services::{collect_commits, group_by_branches, login, create_task, build_task_payload, generate_report, save_report};
 use commands::git::ScanCancelMap;
 use std::sync::{Arc, Mutex};
@@ -100,6 +103,13 @@ fn main() {
             commands::update_zentao_account,
             commands::delete_zentao_account,
             commands::test_zentao_connection,
+            commands::llm_call_openai,
+            commands::llm_call_claude,
+            commands::llm_call_gemini,
+            commands::llm_call_ollama,
+            commands::llm_load_config,
+            commands::llm_save_config,
+            commands::llm_test_connection,
             execute_full_workflow,
         ])
         .run(tauri::generate_context!())

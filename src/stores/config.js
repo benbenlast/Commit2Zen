@@ -5,12 +5,12 @@ export const useConfigStore = defineStore('config', {
   state: () => ({
     zentaoAccounts: [],
     git: {
-      max_commits: 100,
-      include_merged: false,
-      branch_pattern: '.*',
+      maxCommits: 100,
+      includeMerged: false,
+      branchPattern: '.*',
     },
     output: {
-      report_dir: 'reports',
+      reportDir: 'reports',
       verbose: true,
     },
     loaded: false,
@@ -20,11 +20,14 @@ export const useConfigStore = defineStore('config', {
     async load() {
       try {
         const config = await invoke('load_config')
-        // 后端返回 snake_case 字段名，需要手动映射到前端 camelCase
-        this.zentaoAccounts = config.zentao_accounts || []
-        this.git = config.git || this.git
-        this.output = config.output || this.output
-        this.loaded = true
+        // 后端现在返回 camelCase 字段名 (通过 serde rename)
+        // 直接使用 $patch 合并配置
+        this.$patch({
+          zentaoAccounts: config.zentaoAccounts || [],
+          git: config.git || this.git,
+          output: config.output || this.output,
+          loaded: true,
+        })
         return true
       } catch (e) {
         console.error('加载配置失败:', e)
@@ -34,7 +37,20 @@ export const useConfigStore = defineStore('config', {
 
     async save() {
       try {
-        await invoke('save_config', { config: this.$state })
+        // 保存时需要将 camelCase 转换为后端期望的格式
+        const payload = {
+          zentaoAccounts: this.zentaoAccounts,
+          git: {
+            max_commits: this.git.maxCommits ?? this.git.max_commits ?? 100,
+            include_merged: this.git.includeMerged ?? this.git.include_merged ?? false,
+            branch_pattern: this.git.branchPattern ?? this.git.branch_pattern ?? '.*',
+          },
+          output: {
+            report_dir: this.output.reportDir ?? this.output.report_dir ?? 'reports',
+            verbose: this.output.verbose ?? true,
+          },
+        }
+        await invoke('save_config', { config: payload })
         return true
       } catch (e) {
         console.error('保存配置失败:', e)
@@ -98,5 +114,12 @@ export const useConfigStore = defineStore('config', {
         throw e
       }
     },
+  },
+
+  persist: {
+    key: 'config-store',
+    storage: localStorage,
+    // 不持久化 loaded 状态，每次启动时重新从后端加载
+    pick: ['zentaoAccounts', 'git', 'output'],
   },
 })

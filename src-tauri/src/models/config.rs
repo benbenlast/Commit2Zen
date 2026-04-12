@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(rename = "zentaoAccounts")]
     pub zentao_accounts: Vec<ZentaoAccount>,
     pub git: GitConfig,
     pub output: OutputConfig,
@@ -15,14 +16,19 @@ pub struct ZentaoAccount {
     pub url: String,
     pub account: String,
     pub password: String,
+    #[serde(rename = "assignedTo")]
     pub assigned_to: String,
+    #[serde(rename = "taskType")]
     pub task_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitConfig {
+    #[serde(rename = "maxCommits")]
     pub max_commits: usize,
+    #[serde(rename = "includeMerged")]
     pub include_merged: bool,
+    #[serde(rename = "branchPattern")]
     pub branch_pattern: String,
 }
 
@@ -38,6 +44,7 @@ impl Default for GitConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputConfig {
+    #[serde(rename = "reportDir")]
     pub report_dir: String,
     pub verbose: bool,
 }

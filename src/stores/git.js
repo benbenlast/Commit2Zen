@@ -142,4 +142,11 @@ export const useGitStore = defineStore('git', {
       this.selectedProject = repo
     },
   },
+
+  persist: {
+    key: 'git-store',
+    storage: localStorage,
+    // 只持久化 selectedProject，不持久化 commits, branchGroups 等运行时数据
+    pick: ['selectedProject'],
+  },
 })

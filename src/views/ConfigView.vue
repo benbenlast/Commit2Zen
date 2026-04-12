@@ -1,6 +1,25 @@
 <template>
   <div style="padding: 24px;">
     <n-card title="禅道账号管理">
+      <template #header-extra>
+        <n-space>
+          <n-button size="small" @click="exportConfig" :loading="exporting">
+            <template #icon><n-icon><DownloadOutline /></n-icon></template>
+            导出配置
+          </n-button>
+          <n-button size="small" @click="triggerImport" :loading="importing">
+            <template #icon><n-icon><UploadOutline /></n-icon></template>
+            导入配置
+          </n-button>
+          <input
+            ref="importInputRef"
+            type="file"
+            accept=".json"
+            style="display: none"
+            @change="handleImport"
+          />
+        </n-space>
+      </template>
       <n-space>
         <!-- 左侧：账号列表 -->
         <n-card size="small" style="width: 250px;">
@@ -90,15 +109,21 @@
         <n-form :model="otherConfig" label-placement="left" label-width="120">
           <n-divider title-placement="left">Git 配置</n-divider>
           <n-form-item label="最大提交数">
-            <n-input-number v-model:value="otherConfig.git.max_commits" :min="10" :max="500" />
+            <n-input-number v-model:value="otherConfig.git.maxCommits" :min="10" :max="500" />
+          </n-form-item>
+          <n-form-item label="包含合并提交">
+            <n-switch v-model:value="otherConfig.git.includeMerged" />
           </n-form-item>
           <n-form-item label="分支过滤">
-            <n-input v-model:value="otherConfig.git.branch_pattern" placeholder=".*" />
+            <n-input v-model:value="otherConfig.git.branchPattern" placeholder=".*" />
           </n-form-item>
 
           <n-divider title-placement="left">输出配置</n-divider>
           <n-form-item label="报告目录">
-            <n-input v-model:value="otherConfig.output.report_dir" />
+            <n-input v-model:value="otherConfig.output.reportDir" />
+          </n-form-item>
+          <n-form-item label="详细输出">
+            <n-switch v-model:value="otherConfig.output.verbose" />
           </n-form-item>
         </n-form>
 
@@ -113,6 +138,7 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
+import { DownloadOutline, UploadOutline } from '@vicons/ionicons5'
 import { useConfigStore } from '../stores/config.js'
 
 const message = useMessage()
@@ -125,6 +151,9 @@ const testing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const savingOther = ref(false)
+const exporting = ref(false)
+const importing = ref(false)
+const importInputRef = ref(null)
 
 const editForm = ref({
   id: '',
@@ -138,17 +167,24 @@ const editForm = ref({
 
 const otherConfig = ref({
   git: {
-    max_commits: 100,
-    include_merged: false,
-    branch_pattern: '.*',
+    maxCommits: 100,
+    includeMerged: false,
+    branchPattern: '.*',
   },
   output: {
-    report_dir: 'reports',
+    reportDir: 'reports',
     verbose: true,
   },
 })
 
 const isEditing = ref(false)
+
+// Helper: safely get a value from an object, supporting both camelCase and snake_case
+function safeGet(obj, camelKey, snakeKey, fallback) {
+  if (obj && obj[camelKey] !== undefined) return obj[camelKey]
+  if (obj && obj[snakeKey] !== undefined) return obj[snakeKey]
+  return fallback
+}
 
 // 当 store 加载完成后，自动同步到表单
 watch(
@@ -156,8 +192,15 @@ watch(
   (loaded) => {
     console.log('[ConfigView] watch loaded:', loaded, 'accounts:', configStore.zentaoAccounts)
     if (loaded) {
-      otherConfig.value.git = { ...configStore.git }
-      otherConfig.value.output = { ...configStore.output }
+      otherConfig.value.git = {
+        maxCommits: safeGet(configStore.git, 'maxCommits', 'max_commits', 100),
+        includeMerged: safeGet(configStore.git, 'includeMerged', 'include_merged', false),
+        branchPattern: safeGet(configStore.git, 'branchPattern', 'branch_pattern', '.*'),
+      }
+      otherConfig.value.output = {
+        reportDir: safeGet(configStore.output, 'reportDir', 'report_dir', 'reports'),
+        verbose: safeGet(configStore.output, 'verbose', 'verbose', true),
+      }
     }
   },
   { immediate: true }
@@ -167,8 +210,15 @@ onMounted(async () => {
   console.log('[ConfigView] mounted, loaded:', configStore.loaded, 'accounts:', configStore.zentaoAccounts)
   // 如果 main.js 中已经加载了配置，这里再同步一次
   if (configStore.loaded) {
-    otherConfig.value.git = { ...configStore.git }
-    otherConfig.value.output = { ...configStore.output }
+    otherConfig.value.git = {
+      maxCommits: safeGet(configStore.git, 'maxCommits', 'max_commits', 100),
+      includeMerged: safeGet(configStore.git, 'includeMerged', 'include_merged', false),
+      branchPattern: safeGet(configStore.git, 'branchPattern', 'branch_pattern', '.*'),
+    }
+    otherConfig.value.output = {
+      reportDir: safeGet(configStore.output, 'reportDir', 'report_dir', 'reports'),
+      verbose: safeGet(configStore.output, 'verbose', 'verbose', true),
+    }
   }
 })
 
@@ -285,14 +335,142 @@ const testConnection = async () => {
 const saveOtherConfig = async () => {
   savingOther.value = true
   try {
-    configStore.git = { ...otherConfig.value.git }
-    configStore.output = { ...otherConfig.value.output }
+    // 更新 store 中的配置（使用 camelCase）
+    configStore.git = {
+      maxCommits: otherConfig.value.git.maxCommits,
+      includeMerged: otherConfig.value.git.includeMerged,
+      branchPattern: otherConfig.value.git.branchPattern,
+    }
+    configStore.output = {
+      reportDir: otherConfig.value.output.reportDir,
+      verbose: otherConfig.value.output.verbose,
+    }
     await configStore.save()
     message.success('其他配置已保存')
   } catch (e) {
     message.error(`保存失败: ${e}`)
   } finally {
     savingOther.value = false
+  }
+}
+
+// ==================== 导出/导入配置 ====================
+
+/**
+ * 导出当前配置为 JSON 文件下载
+ */
+const exportConfig = async () => {
+  exporting.value = true
+  try {
+    // 构建导出对象，使用 camelCase 命名以便导入时兼容
+    const exportData = {
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      zentaoAccounts: configStore.zentaoAccounts || [],
+      git: {
+        maxCommits: safeGet(configStore.git, 'maxCommits', 'max_commits', 100),
+        includeMerged: safeGet(configStore.git, 'includeMerged', 'include_merged', false),
+        branchPattern: safeGet(configStore.git, 'branchPattern', 'branch_pattern', '.*'),
+      },
+      output: {
+        reportDir: safeGet(configStore.output, 'reportDir', 'report_dir', 'reports'),
+        verbose: safeGet(configStore.output, 'verbose', 'verbose', true),
+      },
+    }
+
+    const json = JSON.stringify(exportData, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `commit2zen-config-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    message.success('配置已导出')
+  } catch (e) {
+    message.error(`导出失败: ${e}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
+/**
+ * 触发文件选择对话框
+ */
+const triggerImport = () => {
+  importInputRef.value?.click()
+}
+
+/**
+ * 处理导入的 JSON 文件
+ */
+const handleImport = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  importing.value = true
+  try {
+    const text = await file.text()
+    const imported = JSON.parse(text)
+
+    // 验证基本结构
+    if (!imported.zentaoAccounts && !imported.git && !imported.output) {
+      throw new Error('无效的配置文件格式')
+    }
+
+    // 确认对话框
+    dialog.warning({
+      title: '确认导入',
+      content: '导入配置将覆盖当前配置，确定要继续吗？',
+      positiveText: '导入',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        try {
+          // 应用导入的配置
+          if (imported.zentaoAccounts) {
+            configStore.zentaoAccounts = imported.zentaoAccounts
+          }
+          if (imported.git) {
+            configStore.git = {
+              maxCommits: safeGet(imported.git, 'maxCommits', 'max_commits', 100),
+              includeMerged: safeGet(imported.git, 'includeMerged', 'include_merged', false),
+              branchPattern: safeGet(imported.git, 'branchPattern', 'branch_pattern', '.*'),
+            }
+          }
+          if (imported.output) {
+            configStore.output = {
+              reportDir: safeGet(imported.output, 'reportDir', 'report_dir', 'reports'),
+              verbose: safeGet(imported.output, 'verbose', 'verbose', true),
+            }
+          }
+
+          // 同步到本地表单
+          otherConfig.value.git = { ...configStore.git }
+          otherConfig.value.output = { ...configStore.output }
+
+          // 保存到后端
+          await configStore.save()
+
+          message.success('配置已导入并保存')
+        } catch (e) {
+          message.error(`导入保存失败: ${e}`)
+        }
+      },
+      onNegativeClick: () => {
+        // 重置 input 以便可以重新选择同一文件
+        event.target.value = ''
+      },
+    })
+  } catch (e) {
+    message.error(`导入失败: 文件格式错误 - ${e.message}`)
+  } finally {
+    importing.value = false
+    // 重置 input
+    event.target.value = ''
   }
 }
 </script>

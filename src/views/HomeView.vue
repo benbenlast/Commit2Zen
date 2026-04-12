@@ -11,6 +11,9 @@
         <n-button @click="router.push({ name: 'config' })">
           配置管理
         </n-button>
+        <n-button @click="router.push({ name: 'llm-config' })">
+          AI 配置
+        </n-button>
         <n-button @click="router.push({ name: 'history' })">
           历史记录
         </n-button>

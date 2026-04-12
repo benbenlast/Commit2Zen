@@ -23,7 +23,7 @@
 import { ref, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NDialogProvider, NLayout, NLayoutSider, NLayoutContent, NMenu } from 'naive-ui'
-import { HomeOutline, SettingsOutline, PlayOutline, TimeOutline } from '@vicons/ionicons5'
+import { HomeOutline, SettingsOutline, SparklesOutline, PlayOutline, TimeOutline, SpeedometerOutline } from '@vicons/ionicons5'
 
 const router = useRouter()
 const route = useRoute()
@@ -36,9 +36,19 @@ const menuOptions = [
     icon: () => h(HomeOutline),
   },
   {
+    label: '仪表盘',
+    key: 'dashboard',
+    icon: () => h(SpeedometerOutline),
+  },
+  {
     label: '配置',
     key: 'config',
     icon: () => h(SettingsOutline),
+  },
+  {
+    label: 'AI 配置',
+    key: 'llm-config',
+    icon: () => h(SparklesOutline),
   },
   {
     label: '执行',
