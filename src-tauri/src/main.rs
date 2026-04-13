@@ -21,6 +21,7 @@ async fn execute_full_workflow(
     git_config: GitConfig,
     output_config: OutputConfig,
     date_filter: Option<DateFilter>,
+    ai_summaries: Option<std::collections::HashMap<String, String>>,
 ) -> Result<crate::models::ExecutionReport, String> {
     // 1. 收集 Git 提交
     let commits = collect_commits(&project_path, git_config.max_commits, date_filter)?;
@@ -34,12 +35,14 @@ async fn execute_full_workflow(
     // 4. 为每个分支创建任务
     let mut branch_reports = Vec::new();
     for group in &branch_groups {
+        let ai_summary = ai_summaries.as_ref().and_then(|map| map.get(&group.branch).map(|s| s.as_str()));
         let task_data = build_task_payload(
             &group.branch,
             &group.commits,
             project_id,
             &account.assigned_to,
             &account.task_type,
+            ai_summary,
         );
 
         match create_task(&account.url, &token, &task_data).await {

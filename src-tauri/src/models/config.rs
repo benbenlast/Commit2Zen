@@ -1,10 +1,13 @@
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
-    #[serde(rename = "zentaoAccounts")]
+    #[serde(rename = "zentaoAccounts", alias = "zentao_accounts")]
     pub zentao_accounts: Vec<ZentaoAccount>,
+    #[serde(default)]
     pub git: GitConfig,
+    #[serde(default)]
     pub output: OutputConfig,
 }
 
@@ -16,19 +19,20 @@ pub struct ZentaoAccount {
     pub url: String,
     pub account: String,
     pub password: String,
-    #[serde(rename = "assignedTo")]
+    #[serde(rename = "assignedTo", alias = "assigned_to")]
     pub assigned_to: String,
-    #[serde(rename = "taskType")]
+    #[serde(rename = "taskType", alias = "task_type")]
     pub task_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GitConfig {
-    #[serde(rename = "maxCommits")]
+    #[serde(rename = "maxCommits", alias = "max_commits")]
     pub max_commits: usize,
-    #[serde(rename = "includeMerged")]
+    #[serde(rename = "includeMerged", alias = "include_merged")]
     pub include_merged: bool,
-    #[serde(rename = "branchPattern")]
+    #[serde(rename = "branchPattern", alias = "branch_pattern")]
     pub branch_pattern: String,
 }
 
@@ -43,8 +47,9 @@ impl Default for GitConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct OutputConfig {
-    #[serde(rename = "reportDir")]
+    #[serde(rename = "reportDir", alias = "report_dir")]
     pub report_dir: String,
     pub verbose: bool,
 }

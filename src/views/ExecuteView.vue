@@ -161,16 +161,40 @@
 
         <n-data-table
           :columns="commitColumns"
-          :data="commits"
+          :data="filteredCommits"
           :pagination="{ pageSize: 10 }"
           :bordered="false"
         />
 
         <n-divider />
 
-        <n-h3>分支汇总</n-h3>
-        <n-grid :cols="2" :x-gap="12">
-          <n-gi v-for="group in branchGroups" :key="group.branch">
+        <n-space justify="space-between" align="center" class="mb-4">
+          <n-space align="center">
+            <n-h3 style="margin: 0;">分支汇总</n-h3>
+            <n-select 
+              v-model:value="targetAuthor" 
+              :options="authorOptions" 
+              placeholder="选择要总结的目标作者 (可选)" 
+              clearable
+              style="width: 240px; margin-left: 16px;"
+            />
+          </n-space>
+          <n-button 
+            v-if="llmStore.getProviderForTask && llmStore.getProviderForTask('taskDescription')" 
+            type="primary" 
+            secondary 
+            @click="generateAllSummaries"
+            :loading="generatingSummaries"
+          >
+            <template #icon>
+              <n-icon><SparklesOutline /></n-icon>
+            </template>
+            AI 智能生成任务描述
+          </n-button>
+        </n-space>
+        
+        <n-grid :cols="2" :x-gap="12" :y-gap="12">
+          <n-gi v-for="group in filteredBranchGroups" :key="group.branch">
             <n-card :title="group.branch" size="small">
               <n-descriptions :column="2" size="small">
                 <n-descriptions-item label="提交数">{{ group.commit_count }}</n-descriptions-item>
@@ -178,11 +202,18 @@
                 <n-descriptions-item label="文件数">{{ group.summary.total_files }}</n-descriptions-item>
                 <n-descriptions-item label="时间范围">{{ group.date_range.start.slice(0, 10) }}</n-descriptions-item>
               </n-descriptions>
+              <div v-if="aiSummaries[group.branch]" class="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm whitespace-pre-wrap">
+                <div class="text-xs text-muted mb-1 flex justify-between">
+                  <span>AI 摘要:</span>
+                  <n-button size="tiny" text @click="regenerateSummary(group)">重新生成</n-button>
+                </div>
+                {{ aiSummaries[group.branch] }}
+              </div>
             </n-card>
           </n-gi>
         </n-grid>
 
-        <n-button type="primary" size="large" @click="executeWorkflow" :loading="executing" block>
+        <n-button type="primary" size="large" @click="executeWorkflow" :loading="executing" block style="margin-top: 16px;">
           创建禅道任务
         </n-button>
       </n-space>
@@ -217,15 +248,18 @@
 import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
+import { SparklesOutline } from '@vicons/ionicons5'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { useGitStore } from '@/stores/git.js'
 import { useConfigStore } from '@/stores/config.js'
+import { useLLMStore } from '@/stores/llm.js'
 
 const router = useRouter()
 const message = useMessage()
 const gitStore = useGitStore()
 const configStore = useConfigStore()
+const llmStore = useLLMStore()
 
 // Step state
 const currentStep = ref(1)
@@ -259,6 +293,37 @@ const collecting = ref(false)
 // Preview state
 const commits = ref([])
 const branchGroups = ref([])
+const aiSummaries = ref({})
+const generatingSummaries = ref(false)
+const targetAuthor = ref(null)
+
+const authorOptions = computed(() => {
+  const authors = new Set(commits.value.map(c => c.author))
+  return Array.from(authors).map(a => ({ label: a, value: a }))
+})
+
+const filteredCommits = computed(() => {
+  if (!targetAuthor.value) return commits.value
+  return commits.value.filter(c => c.author === targetAuthor.value)
+})
+
+const filteredBranchGroups = computed(() => {
+  if (!targetAuthor.value) return branchGroups.value
+  
+  return branchGroups.value.map(group => {
+    const authorCommits = group.commits.filter(c => c.author === targetAuthor.value)
+    if (authorCommits.length === 0) return null
+    
+    return {
+      ...group,
+      commits: authorCommits, // 在提交时仅带上该作者的commits
+      commit_count: authorCommits.length,
+      authors: [targetAuthor.value],
+      // 保留原始的 commits 作为上下文，存放在一个新字段里供 AI 使用
+      _allCommits: group.commits 
+    }
+  }).filter(Boolean)
+})
 
 // Execution state
 const executing = ref(false)
@@ -492,15 +557,18 @@ const collectAndPreview = async () => {
     // 重新收集提交记录
     commits.value = await invoke('collect_git_log', {
       projectPath: selectedGitRepo.value.path,
-      maxCommits: configStore.git.max_commits,
+      maxCommits: configStore.git.maxCommits ?? configStore.git.max_commits ?? 100,
       dateFilter: dateFilterValue.value,
     })
 
     // 按分支分组
     branchGroups.value = await invoke('group_commits_by_branch', {
       commits: commits.value,
-      branchPattern: configStore.git.branchPattern || null,
+      branchPattern: configStore.git.branchPattern ?? configStore.git.branch_pattern ?? null,
     })
+    
+    // 清空上次的 AI 摘要
+    aiSummaries.value = {}
 
     currentStep.value = 3
     message.success(`预览已加载: ${commits.value.length} 条提交`)
@@ -509,6 +577,72 @@ const collectAndPreview = async () => {
   } finally {
     collecting.value = false
   }
+}
+
+const generateSummaryForBranch = async (group) => {
+  try {
+    let systemPrompt = ''
+    let messages = []
+    
+    if (targetAuthor.value) {
+      // 区分目标作者的提交和其他人的提交（上下文）
+      const allCommits = group._allCommits || group.commits
+      const targetCommits = allCommits.filter(c => c.author === targetAuthor.value)
+      const contextCommits = allCommits.filter(c => c.author !== targetAuthor.value)
+      
+      const targetText = targetCommits.map(c => `[${c.author}] ${c.date}\n${c.message}`).join('\n\n')
+      const contextText = contextCommits.length > 0 
+        ? contextCommits.map(c => `[${c.author}] ${c.date}\n${c.message}`).join('\n\n')
+        : '无'
+
+      messages = [
+        { role: 'user', content: `【项目上下文/他人近期工作】\n${contextText}\n\n【目标员工(${targetAuthor.value})的工作】\n${targetText}` }
+      ]
+      
+      systemPrompt = `你是一个专业的研发经理，负责撰写团队成员的工作总结（作为禅道任务描述）。
+请根据提供的【目标员工的工作】提交记录，并参考【项目上下文/他人近期工作】来理解其工作背景。
+请详细、专业地扩写目标员工的工作内容，解释他做了什么、为什么这么做，以及这些工作在整个分支/项目中的作用。
+请保持简明扼要，使用列表形式归纳核心功能点，不要编造未提及的内容。`
+    } else {
+      messages = group.commits.map(c => ({
+        role: 'user',
+        content: `[${c.author}] ${c.date}\n${c.message}`
+      }))
+      
+      systemPrompt = `你是一个专业的代码审查与任务分析助手。
+请根据提供的 Git 提交记录，总结该分支的主要工作内容，作为禅道任务的补充说明。
+请保持简明扼要，使用列表形式归纳核心功能点，不要编造未提及的内容。`
+    }
+    
+    const result = await llmStore.callLLMForTask('taskDescription', messages, systemPrompt)
+    if (result && result.content) {
+      aiSummaries.value[group.branch] = result.content
+    }
+  } catch (e) {
+    console.error(`[AI] 生成分支 ${group.branch} 摘要失败:`, e)
+    message.warning(`生成分支 ${group.branch} 摘要失败: ${e.message || e}`)
+  }
+}
+
+const generateAllSummaries = async () => {
+  generatingSummaries.value = true
+  message.info('开始智能生成摘要...')
+  
+  const promises = filteredBranchGroups.value.map(group => {
+    // 如果已经有摘要则跳过
+    if (aiSummaries.value[group.branch]) return Promise.resolve()
+    return generateSummaryForBranch(group)
+  })
+  
+  await Promise.allSettled(promises)
+  generatingSummaries.value = false
+  message.success('摘要生成完成')
+}
+
+const regenerateSummary = async (group) => {
+  message.info(`正在重新生成 ${group.branch} 的摘要...`)
+  await generateSummaryForBranch(group)
+  message.success(`已更新 ${group.branch} 的摘要`)
 }
 
 const executeWorkflow = async () => {
@@ -527,15 +661,16 @@ const executeWorkflow = async () => {
       projectId: selectedProject.value.id,
       projectPath: selectedGitRepo.value.path,
       gitConfig: {
-        max_commits: configStore.git.max_commits,
-        include_merged: configStore.git.include_merged,
-        branch_pattern: configStore.git.branch_pattern || '.*',
+        maxCommits: configStore.git.maxCommits ?? configStore.git.max_commits ?? 100,
+        includeMerged: configStore.git.includeMerged ?? configStore.git.include_merged ?? false,
+        branchPattern: configStore.git.branchPattern ?? configStore.git.branch_pattern ?? '.*',
       },
       outputConfig: {
-        report_dir: configStore.output.report_dir,
-        verbose: configStore.output.verbose,
+        reportDir: configStore.output.reportDir ?? configStore.output.report_dir ?? 'reports',
+        verbose: configStore.output.verbose ?? true,
       },
       dateFilter: dateFilterValue.value,
+      aiSummaries: Object.keys(aiSummaries.value).length > 0 ? aiSummaries.value : null,
     })
 
     taskResults.value = report.branches

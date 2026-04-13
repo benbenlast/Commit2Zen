@@ -84,7 +84,7 @@
               <n-input v-model:value="editForm.model" placeholder="gpt-4o-mini" />
             </n-form-item>
             <n-form-item label="Temperature">
-              <n-space style="width: 100%;" align="center">
+              <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
                 <n-slider
                   v-model:value="editForm.temperature"
                   :min="0"
@@ -97,9 +97,10 @@
                   :min="0"
                   :max="2"
                   :step="0.1"
-                  style="width: 100px;"
+                  size="small"
+                  style="width: 90px; flex-shrink: 0;"
                 />
-              </n-space>
+              </div>
             </n-form-item>
             <n-form-item label="Max Tokens">
               <n-input-number

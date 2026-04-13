@@ -37,13 +37,13 @@
       <!-- 近7天活跃度 -->
       <div class="card-base">
         <h3 class="text-base font-semibold mb-4">近 7 天活跃度</h3>
-        <v-chart :option="activityChartOption" class="h-64" autoresize />
+        <v-chart :option="activityChartOption" :init-options="chartInitOptions" class="w-full h-64" autoresize />
       </div>
 
       <!-- 分支分布 -->
       <div class="card-base">
         <h3 class="text-base font-semibold mb-4">分支类型分布</h3>
-        <v-chart :option="branchChartOption" class="h-64" autoresize />
+        <v-chart :option="branchChartOption" :init-options="chartInitOptions" class="w-full h-64" autoresize />
       </div>
     </div>
 
@@ -96,10 +96,24 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { useLLMStore } from '@/stores/llm.js'
+
+use([
+  CanvasRenderer,
+  LineChart,
+  PieChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+])
 
 const router = useRouter()
 const llmStore = useLLMStore()
+const chartInitOptions = { renderer: 'canvas' }
 
 // 统计数据
 const stats = ref({

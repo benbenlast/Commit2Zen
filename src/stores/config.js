@@ -37,16 +37,16 @@ export const useConfigStore = defineStore('config', {
 
     async save() {
       try {
-        // 保存时需要将 camelCase 转换为后端期望的格式
+        // 统一保存为 camelCase，并兼容旧状态里的 snake_case 字段
         const payload = {
           zentaoAccounts: this.zentaoAccounts,
           git: {
-            max_commits: this.git.maxCommits ?? this.git.max_commits ?? 100,
-            include_merged: this.git.includeMerged ?? this.git.include_merged ?? false,
-            branch_pattern: this.git.branchPattern ?? this.git.branch_pattern ?? '.*',
+            maxCommits: this.git.maxCommits ?? this.git.max_commits ?? 100,
+            includeMerged: this.git.includeMerged ?? this.git.include_merged ?? false,
+            branchPattern: this.git.branchPattern ?? this.git.branch_pattern ?? '.*',
           },
           output: {
-            report_dir: this.output.reportDir ?? this.output.report_dir ?? 'reports',
+            reportDir: this.output.reportDir ?? this.output.report_dir ?? 'reports',
             verbose: this.output.verbose ?? true,
           },
         }

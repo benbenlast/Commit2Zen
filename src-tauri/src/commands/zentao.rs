@@ -21,7 +21,8 @@ pub async fn zentao_create_task(
     project_id: u32,
     assigned_to: String,
     task_type: String,
+    ai_summary: Option<String>,
 ) -> Result<TaskCreateResult, String> {
-    let task_data = build_task_payload(&branch, &commits, project_id, &assigned_to, &task_type);
+    let task_data = build_task_payload(&branch, &commits, project_id, &assigned_to, &task_type, ai_summary.as_deref());
     create_task(&url, &token, &task_data).await
 }

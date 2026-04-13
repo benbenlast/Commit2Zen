@@ -157,14 +157,23 @@ pub fn build_task_payload(
     project_id: u32,
     assigned_to: &str,
     task_type: &str,
+    ai_summary: Option<&str>,
 ) -> TaskPayload {
     // 从第一条提交提取作者，用于任务名称
     let author = commits.first().map(|c| c.author.as_str()).unwrap_or("未知");
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
+    let mut final_desc = String::new();
+    if let Some(summary) = ai_summary {
+        final_desc.push_str("<h3>AI 摘要</h3>\n");
+        final_desc.push_str(&format!("<p>{}</p>\n", summary.replace('\n', "<br/>")));
+        final_desc.push_str("<hr/>\n");
+    }
+    final_desc.push_str(&build_task_description(branch, commits));
+
     TaskPayload {
         name: format!("[{}] {} - 开发任务 ({})", branch, author, date),
-        desc: build_task_description(branch, commits),
+        desc: final_desc,
         project: project_id,
         assigned_to: assigned_to.to_string(),
         task_type: task_type.to_string(),
