@@ -136,19 +136,6 @@
     <n-card title="任务分配配置" style="margin-top: 24px;">
       <n-collapse :default-expanded-names="['task-assignments']">
         <n-collapse-item name="task-assignments" title="任务 → LLM 映射">
-          <template #header>
-            <n-space justify="space-between" style="width: 100%;">
-              <n-text strong>任务 → LLM 映射</n-text>
-              <n-switch v-model:value="taskAssignmentsEnabled" @update:value="onTaskAssignmentsToggle">
-                <template #checked>
-                  已启用
-                </template>
-                <template #unchecked>
-                  已禁用
-                </template>
-              </n-switch>
-            </n-space>
-          </template>
           <n-space vertical>
             <n-space vertical v-for="task in taskList" :key="task.key" style="border: 1px solid #e0e0e6; border-radius: 8px; padding: 12px;">
               <n-space justify="space-between" align="center">
@@ -220,8 +207,6 @@ const taskAssignments = ref({
   trendAnalysis: { enabled: false, provider: null },
 })
 
-const taskAssignmentsEnabled = ref(false)
-
 const taskList = [
   {
     key: 'commitSummary',
@@ -288,7 +273,6 @@ function syncTaskAssignmentsFromStore() {
     branchSuggestion: { enabled: false, provider: null },
     trendAnalysis: { enabled: false, provider: null },
   }
-  taskAssignmentsEnabled.value = llmStore.llmConfig?.taskAssignment?.enabled ?? false
   for (const assignment of assignments) {
     if (assignment.taskType in taskAssignments.value) {
       taskAssignments.value[assignment.taskType] = {
@@ -423,17 +407,6 @@ function toggleTaskTaskAssignment(taskType, enabled) {
   }
 }
 
-function onTaskAssignmentsToggle(enabled) {
-  taskAssignmentsEnabled.value = enabled
-  if (!enabled) {
-    // 禁用所有任务分配
-    for (const key of Object.keys(taskAssignments.value)) {
-      taskAssignments.value[key].enabled = false
-      taskAssignments.value[key].provider = null
-    }
-  }
-}
-
 function updateTaskAssignment(taskType, providerType) {
   taskAssignments.value[taskType].provider = providerType
 }
@@ -465,13 +438,6 @@ async function saveTaskAssignments() {
           enabled: false,
         })
       }
-    }
-
-    // 保存总启用状态
-    const manager = getLLMManager()
-    const config = manager.getConfig()
-    if (config && config.taskAssignment) {
-      config.taskAssignment.enabled = taskAssignmentsEnabled.value
     }
 
     await llmStore.saveConfig()

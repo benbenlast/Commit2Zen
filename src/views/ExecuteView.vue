@@ -4,6 +4,7 @@
       <n-step title="选择 Git 项目" description="扫描或手动选择" />
       <n-step title="配置禅道" description="登录并选择项目" />
       <n-step title="预览信息" description="查看提交和分支" />
+      <n-step title="AI 优化" description="智能摘要预览" />
       <n-step title="执行" description="创建禅道任务" />
     </n-steps>
 
@@ -147,7 +148,7 @@
           </n-form-item>
 
           <n-space v-if="loginStatus === 'connected' && selectedProjectId">
-            <n-tag type="success">已选择项目</n-tag>
+            <n-button @click="currentStep = 1">返回上一步</n-button>
             <n-button @click="collectAndPreview" :loading="collecting" type="primary">下一步：预览</n-button>
           </n-space>
         </template>
@@ -168,9 +169,9 @@
 
         <n-divider />
 
-        <n-space justify="space-between" align="center" class="mb-4">
+        <n-space justify="space-between" align="center" class="mb-4 mt-6">
           <n-space align="center">
-            <n-h3 style="margin: 0;">分支汇总</n-h3>
+            <n-h3 style="margin: 0;">分支汇总与选择</n-h3>
             <n-select 
               v-model:value="targetAuthor" 
               :options="authorOptions" 
@@ -179,18 +180,6 @@
               style="width: 240px; margin-left: 16px;"
             />
           </n-space>
-          <n-button 
-            v-if="llmStore.getProviderForTask && llmStore.getProviderForTask('taskDescription')" 
-            type="primary" 
-            secondary 
-            @click="generateAllSummaries"
-            :loading="generatingSummaries"
-          >
-            <template #icon>
-              <n-icon><SparklesOutline /></n-icon>
-            </template>
-            AI 智能生成任务描述
-          </n-button>
         </n-space>
         
         <n-grid :cols="2" :x-gap="12" :y-gap="12">
@@ -202,25 +191,80 @@
                 <n-descriptions-item label="文件数">{{ group.summary.total_files }}</n-descriptions-item>
                 <n-descriptions-item label="时间范围">{{ group.date_range.start.slice(0, 10) }}</n-descriptions-item>
               </n-descriptions>
-              <div v-if="aiSummaries[group.branch]" class="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm whitespace-pre-wrap">
-                <div class="text-xs text-muted mb-1 flex justify-between">
-                  <span>AI 摘要:</span>
-                  <n-button size="tiny" text @click="regenerateSummary(group)">重新生成</n-button>
-                </div>
-                {{ aiSummaries[group.branch] }}
-              </div>
             </n-card>
           </n-gi>
         </n-grid>
 
-        <n-button type="primary" size="large" @click="executeWorkflow" :loading="executing" block style="margin-top: 16px;">
-          创建禅道任务
-        </n-button>
+        <n-space style="margin-top: 16px;">
+          <n-button @click="currentStep = 2">返回上一步</n-button>
+          <n-button type="primary" @click="currentStep = 4">下一步：AI 优化</n-button>
+        </n-space>
       </n-space>
     </n-card>
 
-    <!-- Step 4: Results -->
-    <n-card v-if="currentStep === 4" title="执行结果">
+    <!-- Step 4: AI 优化 -->
+    <n-card v-if="currentStep === 4" title="AI 优化 (预览与生成)">
+      <n-space vertical>
+        <n-space justify="space-between" align="center" class="mb-4">
+          <n-h3 style="margin: 0;">智能摘要生成</n-h3>
+          <n-button 
+            v-if="llmStore.getProviderForTask && llmStore.getProviderForTask('taskDescription')" 
+            type="primary" 
+            secondary 
+            @click="generateAllSummaries"
+            :loading="generatingSummaries"
+          >
+            <template #icon>
+              <n-icon><SparklesOutline /></n-icon>
+            </template>
+            一键生成所有分支任务描述
+          </n-button>
+        </n-space>
+        
+        <n-grid :cols="1" :y-gap="16">
+          <n-gi v-for="group in filteredBranchGroups" :key="group.branch">
+            <n-card :title="group.branch" size="medium" hoverable>
+              <template #header-extra>
+                <n-button 
+                  v-if="llmStore.getProviderForTask && llmStore.getProviderForTask('taskDescription')" 
+                  size="small" 
+                  type="primary" 
+                  ghost
+                  @click="regenerateSummary(group)"
+                  :loading="group._generating"
+                >
+                  <template #icon>
+                    <n-icon><SparklesOutline /></n-icon>
+                  </template>
+                  {{ aiSummaries[group.branch] ? '重新生成摘要' : '生成摘要' }}
+                </n-button>
+              </template>
+
+              <div v-if="aiSummaries[group.branch]" class="mt-2 p-4 bg-blue-50 dark:bg-gray-800 rounded border border-blue-100 dark:border-gray-700">
+                <div class="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2 flex items-center">
+                  <n-icon class="mr-1"><SparklesOutline /></n-icon>
+                  AI 智能摘要预览 (将作为禅道任务描述)
+                </div>
+                <div class="text-sm whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-300">
+                  {{ aiSummaries[group.branch] }}
+                </div>
+              </div>
+              <n-empty v-else description="暂无 AI 摘要，请点击生成" />
+            </n-card>
+          </n-gi>
+        </n-grid>
+
+        <n-space style="margin-top: 16px;">
+          <n-button @click="currentStep = 3">返回上一步</n-button>
+          <n-button type="primary" size="large" @click="executeWorkflow" :loading="executing">
+            创建禅道任务
+          </n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- Step 5: Results -->
+    <n-card v-if="currentStep === 5" title="执行结果">
       <n-space vertical>
         <n-result
           v-if="!executing && taskResults.length > 0"
@@ -308,7 +352,7 @@ const filteredCommits = computed(() => {
 })
 
 const filteredBranchGroups = computed(() => {
-  if (!targetAuthor.value) return branchGroups.value
+  if (!targetAuthor.value) return branchGroups.value.map(group => ({ ...group, _generating: false }))
   
   return branchGroups.value.map(group => {
     const authorCommits = group.commits.filter(c => c.author === targetAuthor.value)
@@ -320,7 +364,8 @@ const filteredBranchGroups = computed(() => {
       commit_count: authorCommits.length,
       authors: [targetAuthor.value],
       // 保留原始的 commits 作为上下文，存放在一个新字段里供 AI 使用
-      _allCommits: group.commits 
+      _allCommits: group.commits,
+      _generating: false
     }
   }).filter(Boolean)
 })
@@ -406,7 +451,14 @@ const resultColumns = [
     title: '任务链接',
     key: 'task_url',
     render: (row) => row.task_url
-      ? h('a', { href: row.task_url, target: '_blank', style: 'color: #2080F0;' }, `任务 #${row.task_id}`)
+      ? h('a', { 
+          href: '#',
+          style: 'color: #2080F0; text-decoration: underline; cursor: pointer;',
+          onClick: (e) => {
+            e.preventDefault()
+            import('@tauri-apps/plugin-shell').then(({ open }) => open(row.task_url))
+          }
+        }, `任务 #${row.task_id}`)
       : '-',
   },
   {
@@ -580,6 +632,7 @@ const collectAndPreview = async () => {
 }
 
 const generateSummaryForBranch = async (group) => {
+  group._generating = true
   try {
     let systemPrompt = ''
     let messages = []
@@ -621,6 +674,8 @@ const generateSummaryForBranch = async (group) => {
   } catch (e) {
     console.error(`[AI] 生成分支 ${group.branch} 摘要失败:`, e)
     message.warning(`生成分支 ${group.branch} 摘要失败: ${e.message || e}`)
+  } finally {
+    group._generating = false
   }
 }
 
@@ -653,7 +708,7 @@ const executeWorkflow = async () => {
 
   executing.value = true
   stepStatus.value = 'process'
-  currentStep.value = 4
+  currentStep.value = 5
 
   try {
     const report = await invoke('execute_full_workflow', {

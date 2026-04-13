@@ -225,7 +225,11 @@ onMounted(async () => {
 const selectAccount = (account) => {
   selectedAccount.value = account
   isNew.value = false
-  editForm.value = { ...account }
+  editForm.value = {
+    ...account,
+    assigned_to: account.assignedTo ?? account.assigned_to ?? '',
+    task_type: account.taskType ?? account.task_type ?? 'dev',
+  }
   isEditing.value = true
 }
 

@@ -28,3 +28,4 @@ once_cell = "1.19"
 uuid = { version = "1.6", features = ["v4"] }
 walkdir = "2.5"
 thiserror = "1.0"
+tauri-plugin-shell = "2.3.5"

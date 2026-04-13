@@ -71,7 +71,17 @@ export const useConfigStore = defineStore('config', {
 
     async addAccount(account) {
       try {
-        const newAccount = await invoke('add_zentao_account', { account })
+        // 统一清理字段，避免 snake_case 和 camelCase 同时存在导致 duplicate field
+        const payload = {
+          id: account.id,
+          name: account.name,
+          url: account.url,
+          account: account.account,
+          password: account.password,
+          assignedTo: account.assignedTo ?? account.assigned_to ?? '',
+          taskType: account.taskType ?? account.task_type ?? 'dev',
+        }
+        const newAccount = await invoke('add_zentao_account', { account: payload })
         this.zentaoAccounts.push(newAccount)
         return newAccount
       } catch (e) {
@@ -82,8 +92,17 @@ export const useConfigStore = defineStore('config', {
 
     async updateAccount(account) {
       try {
-        const updatedAccount = await invoke('update_zentao_account', { account })
-        const index = this.zentaoAccounts.findIndex(a => a.id === account.id)
+        const payload = {
+          id: account.id,
+          name: account.name,
+          url: account.url,
+          account: account.account,
+          password: account.password,
+          assignedTo: account.assignedTo ?? account.assigned_to ?? '',
+          taskType: account.taskType ?? account.task_type ?? 'dev',
+        }
+        const updatedAccount = await invoke('update_zentao_account', { account: payload })
+        const index = this.zentaoAccounts.findIndex(a => a.id === payload.id)
         if (index !== -1) {
           this.zentaoAccounts[index] = updatedAccount
         }
