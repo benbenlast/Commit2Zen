@@ -607,18 +607,23 @@ const collectAndPreview = async () => {
   collecting.value = true
   try {
     // 重新收集提交记录
+    console.log('[调试] 日期筛选值:', dateFilterValue.value)
     commits.value = await invoke('collect_git_log', {
       projectPath: selectedGitRepo.value.path,
       maxCommits: configStore.git.maxCommits ?? configStore.git.max_commits ?? 100,
       dateFilter: dateFilterValue.value,
     })
+    console.log('[调试] 收集到提交数:', commits.value.length)
+    console.log('[调试] 第一条提交:', commits.value[0])
 
     // 按分支分组
     branchGroups.value = await invoke('group_commits_by_branch', {
       commits: commits.value,
       branchPattern: configStore.git.branchPattern ?? configStore.git.branch_pattern ?? null,
     })
-    
+    console.log('[调试] 分组数:', branchGroups.value.length)
+    console.log('[调试] 分组详情:', branchGroups.value)
+
     // 清空上次的 AI 摘要
     aiSummaries.value = {}
 
@@ -634,9 +639,13 @@ const collectAndPreview = async () => {
 const generateSummaryForBranch = async (group) => {
   group._generating = true
   try {
+    console.log('[调试] 开始生成摘要，分支:', group.branch)
+    console.log('[调试] 提交数:', group.commits?.length)
+    console.log('[调试] LLM provider:', llmStore.getProviderForTask('taskDescription'))
+
     let systemPrompt = ''
     let messages = []
-    
+
     if (targetAuthor.value) {
       // 区分目标作者的提交和其他人的提交（上下文）
       const allCommits = group._allCommits || group.commits
@@ -657,11 +666,14 @@ const generateSummaryForBranch = async (group) => {
 请详细、专业地扩写目标员工的工作内容，解释他做了什么、为什么这么做，以及这些工作在整个分支/项目中的作用。
 请保持简明扼要，使用列表形式归纳核心功能点，不要编造未提及的内容。`
     } else {
-      messages = group.commits.map(c => ({
-        role: 'user',
-        content: `[${c.author}] ${c.date}\n${c.message}`
-      }))
-      
+      const commitsText = group.commits
+        .map(c => `[${c.author}] ${c.date}\n${c.message}`)
+        .join('\n\n')
+
+      messages = [
+        { role: 'user', content: `【Git 提交记录】\n${commitsText}` }
+      ]
+
       systemPrompt = `你是一个专业的代码审查与任务分析助手。
 请根据提供的 Git 提交记录，总结该分支的主要工作内容，作为禅道任务的补充说明。
 请保持简明扼要，使用列表形式归纳核心功能点，不要编造未提及的内容。`
@@ -682,14 +694,16 @@ const generateSummaryForBranch = async (group) => {
 const generateAllSummaries = async () => {
   generatingSummaries.value = true
   message.info('开始智能生成摘要...')
-  
-  const promises = filteredBranchGroups.value.map(group => {
-    // 如果已经有摘要则跳过
-    if (aiSummaries.value[group.branch]) return Promise.resolve()
-    return generateSummaryForBranch(group)
-  })
-  
-  await Promise.allSettled(promises)
+
+  for (const group of filteredBranchGroups.value) {
+    if (aiSummaries.value[group.branch]) continue
+    try {
+      await generateSummaryForBranch(group)
+    } catch (e) {
+      console.error(`[AI] 分支 ${group.branch} 摘要失败，继续下一个:`, e)
+    }
+  }
+
   generatingSummaries.value = false
   message.success('摘要生成完成')
 }

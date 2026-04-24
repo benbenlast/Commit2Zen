@@ -53,6 +53,34 @@ export const useLLMStore = defineStore('llm', {
       if (!state.llmConfig) return null
       return state.llmConfig.defaultProvider || null
     },
+
+    /**
+     * 获取适合指定任务的提供商
+     */
+    getProviderForTask: (state) => {
+      return (taskType) => {
+        if (!state.llmConfig) return undefined
+        const assignments = state.llmConfig.taskAssignments || []
+        const assignment = assignments.find(
+          (a) => a.taskType === taskType && a.enabled
+        )
+        if (assignment) {
+          const provider = state.llmConfig.providers[assignment.providerType]
+          if (provider?.enabled) {
+            return provider
+          }
+        }
+        // 返回默认提供商或第一个启用的
+        const defaultType = state.llmConfig.defaultProvider
+        if (defaultType) {
+          const provider = state.llmConfig.providers[defaultType]
+          if (provider?.enabled) {
+            return provider
+          }
+        }
+        return Object.values(state.llmConfig.providers || {}).find((p) => p.enabled)
+      }
+    },
   },
 
   actions: {

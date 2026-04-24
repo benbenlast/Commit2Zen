@@ -36,6 +36,7 @@ async fn try_call_openai(
     messages: &[Message],
     timeout_ms: Option<u64>,
 ) -> Result<LLMResponse, String> {
+    let start = std::time::Instant::now();
     let client = build_client(timeout_ms);
 
     // 构建 OpenAI 格式的消息
@@ -454,13 +455,57 @@ async fn try_call_ollama(
     })
 }
 
-/// 构建 HTTP 客户端，支持超时配置
+/// 构建 HTTP 客户端，支持超时配置和系统代理
 fn build_client(timeout_ms: Option<u64>) -> Client {
-    let mut builder = Client::builder();
-    if let Some(ms) = timeout_ms {
-        builder = builder.timeout(std::time::Duration::from_millis(ms));
-    }
+    let builder = Client::builder();
+
+    let builder = set_proxy(builder);
+
+    // 默认超时 120 秒（AI 请求可能较慢）
+    let timeout = timeout_ms.unwrap_or(120_000);
+    let builder = builder.timeout(std::time::Duration::from_millis(timeout));
+
+    // 禁用 HTTP/2，避免某些代理环境下 stream canceled
+    let builder = builder.http1_only();
+
+    // 禁用连接池（每次请求新连接）
+    let builder = builder.pool_max_idle_per_host(0);
+
     builder.build().unwrap_or_else(|_| Client::new())
+}
+
+/// 检测并设置代理：先读环境变量，再读 git config
+fn set_proxy(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    // 1. 先检查 HTTP_PROXY / HTTPS_PROXY 环境变量
+    if let Ok(proxy_url) = std::env::var("HTTP_PROXY").or_else(|_| std::env::var("http_proxy")) {
+        if let Ok(proxy) = reqwest::Proxy::http(&proxy_url) {
+            eprintln!("[LLM] 使用环境变量 HTTP 代理: {}", proxy_url);
+            return builder.proxy(proxy);
+        }
+    }
+    if let Ok(proxy_url) = std::env::var("HTTPS_PROXY").or_else(|_| std::env::var("https_proxy")) {
+        if let Ok(proxy) = reqwest::Proxy::https(&proxy_url) {
+            eprintln!("[LLM] 使用环境变量 HTTPS 代理: {}", proxy_url);
+            return builder.proxy(proxy);
+        }
+    }
+
+    // 2. 再尝试读取 git config http.proxy
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["config", "--global", "http.proxy"])
+        .output()
+    {
+        let proxy_url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !proxy_url.is_empty() {
+            if let Ok(proxy) = reqwest::Proxy::http(&proxy_url) {
+                eprintln!("[LLM] 使用 Git 配置的 HTTP 代理: {}", proxy_url);
+                return builder.proxy(proxy);
+            }
+        }
+    }
+
+    // 3. 未配置代理
+    builder
 }
 
 /// 加载 LLM 配置

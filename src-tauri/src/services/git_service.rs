@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use regex::Regex;
 
 pub fn collect_commits(repo_path: &str, max_commits: usize, date_filter: Option<DateFilter>) -> Result<Vec<Commit>, String> {
+    eprintln!("[collect_commits] 开始收集: path={}, max_commits={:?}, date_filter={:?}", repo_path, max_commits, date_filter);
     let repo = Repository::open(repo_path)
         .map_err(|e| format!("无法打开仓库: {}", e))?;
 
@@ -128,11 +129,16 @@ fn get_commit_files(repo: &Repository, commit: &git2::Commit) -> Vec<String> {
 }
 
 pub fn group_by_branches(commits: Vec<Commit>, branch_pattern: Option<&str>) -> Vec<BranchGroup> {
+    eprintln!("[group_by_branches] 收到 {} 条提交, pattern={:?}", commits.len(), branch_pattern);
     let pattern = branch_pattern
         .and_then(|p| Regex::new(p).ok())
         .unwrap_or_else(|| Regex::new(".*").unwrap());
 
     let mut groups: HashMap<String, Vec<Commit>> = HashMap::new();
+
+    for commit in &commits {
+        eprintln!("[group_by_branches] 提交 {} branches={:?}", commit.hash, commit.branches);
+    }
 
     for commit in commits {
         let branch_name = commit.branches
